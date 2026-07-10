@@ -1,26 +1,168 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (driven by next-themes on <html>). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Calm Focus palette. Semantic tokens resolve to different hexes per theme via the
+  :root / .dark blocks below; @theme maps them into Tailwind color utilities.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8f8fa;
+  --foreground: #1b1d28;
+  --card: #eeeef3;
+  --card-foreground: #1b1d28;
+  --surface-offset: #dfdfe8;
+  --muted: #dfdfe8;
+  --muted-foreground: #5b5d6e;
+  --primary: #4c5fd5;
+  --primary-foreground: #ffffff;
+  --secondary: #38439e;
+  --secondary-foreground: #ffffff;
+  --accent: #f2994a;
+  --accent-foreground: #1b1d28;
+  --border: #c7c7d6;
+  --input: #c7c7d6;
+  --ring: #4c5fd5;
+  --success: #22c55e;
+  --error: #dc2626;
+  --warning: #f59e0b;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: #12131c;
+  --foreground: #ededf2;
+  --card: #1c1e2b;
+  --card-foreground: #ededf2;
+  --surface-offset: #262838;
+  --muted: #262838;
+  --muted-foreground: #a2a4b8;
+  --primary: #6b7ce8;
+  --primary-foreground: #0b0c14;
+  --secondary: #4a55b8;
+  --secondary-foreground: #ffffff;
+  --accent: #f2994a;
+  --accent-foreground: #12131c;
+  --border: #33354a;
+  --input: #33354a;
+  --ring: #6b7ce8;
+  --success: #34d17d;
+  --error: #f16a6a;
+  --warning: #fbbf24;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-surface-offset: var(--surface-offset);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 0.25rem);
+  --radius-sm: calc(var(--radius) - 0.4rem);
+
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures for time labels in the week grid. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- iPhone safe-area handling ---- */
+.app-shell {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.bottom-nav {
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+}
+.week-grid-header {
+  padding-top: max(env(safe-area-inset-top), 12px);
+}
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 12px);
+}
+
+/* ---- No-zoom enforcement ---- */
+button,
+a,
+[role="button"],
+input,
+select,
+textarea,
+.block-chip,
+.grid-cell {
+  touch-action: manipulation;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px; /* prevents iOS auto-zoom on focus */
+}
+
+.app-chrome,
+.bottom-nav,
+.view-switcher,
+.week-grid-header {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.block-title,
+.block-notes,
+.agenda-item-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Loading skeleton shimmer. */
+@keyframes shimmer {
+  0% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.5; }
+}
+.skeleton {
+  background: var(--muted);
+  border-radius: var(--radius-md);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Visible focus rings for keyboard nav (WCAG). */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
