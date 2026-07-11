@@ -47,6 +47,7 @@ export interface Occurrence {
   startTime: string | null; // HH:MM, null for flexible tasks
   endTime: string | null;
   reminderLeadMinutes: number;
+  isRecurring: boolean; // whether the parent block is a recurring series
   isException: boolean; // this occurrence was rescheduled
 }
 
@@ -79,6 +80,7 @@ function makeOccurrence(
     startTime: startTime ? normalizeTime(startTime) : null,
     endTime: endTime ? normalizeTime(endTime) : null,
     reminderLeadMinutes: block.reminderLeadMinutes,
+    isRecurring: block.isRecurring,
     isException,
   };
 }

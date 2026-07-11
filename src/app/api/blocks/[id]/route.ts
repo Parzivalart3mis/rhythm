@@ -30,6 +30,17 @@ async function ownedBlock(userId: string, id: string) {
   return row ?? null;
 }
 
+// GET /api/blocks/:id — raw block, used to seed the series editor.
+export async function GET(_req: Request, { params }: Params) {
+  const userId = await requireUser();
+  if (!userId) return unauthorized();
+  const { id } = await params;
+
+  const block = await ownedBlock(userId, id);
+  if (!block) return notFound("Block not found.");
+  return NextResponse.json({ block });
+}
+
 // PATCH /api/blocks/:id — edits the whole series (full block replacement).
 export async function PATCH(req: Request, { params }: Params) {
   const userId = await requireUser();

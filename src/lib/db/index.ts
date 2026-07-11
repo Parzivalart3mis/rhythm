@@ -5,12 +5,17 @@ import * as schema from "./schema";
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  // Fail loudly at first query rather than at import time, so the app can still
-  // boot in environments where the DB isn't configured (e.g. static checks).
+  // Warn but don't crash at import time, so the app can still be built and boot
+  // in environments where the DB isn't configured yet (e.g. build page-data
+  // collection). Queries will fail at runtime until DATABASE_URL is set.
   console.warn("DATABASE_URL is not set — database queries will fail.");
 }
 
-const sql = neon(connectionString ?? "postgres://invalid");
+// neon() throws on an empty/invalid string at construction, so fall back to a
+// syntactically valid placeholder when unset.
+const sql = neon(
+  connectionString || "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+);
 export const db = drizzle(sql, { schema });
 
 export { schema };
