@@ -183,7 +183,11 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
       const path = isEditing ? `/api/blocks/${target.blockId}` : "/api/blocks";
       const method = isEditing ? "PATCH" : "POST";
       const res = await apiFetch<
-        | { status: "created" | "updated"; blockId: string }
+        | {
+            status: "created" | "updated";
+            blockId: string;
+            clearedOverrides?: number;
+          }
         | { status: "conflict_warning"; conflictingBlocks: ConflictingBlock[] }
       >(path, { method, body: JSON.stringify(payload) });
 
@@ -192,7 +196,19 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
         setSaving(false);
         return;
       }
-      toast(isEditing ? "Block updated." : "Block added.", "success");
+      // Changing the shape of a series discards its per-occurrence edits; say so
+      // rather than letting them vanish silently.
+      const cleared = res.clearedOverrides ?? 0;
+      toast(
+        !isEditing
+          ? "Block added."
+          : cleared > 0
+            ? `Block updated. ${cleared} moved or skipped ${
+                cleared === 1 ? "occurrence was" : "occurrences were"
+              } reset.`
+            : "Block updated.",
+        "success"
+      );
       bumpRefresh();
       onOpenChange(false);
     } catch (e) {

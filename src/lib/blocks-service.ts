@@ -38,6 +38,25 @@ export async function releaseDeliveryClaims(
     );
 }
 
+/**
+ * Drop a block's per-occurrence overrides, returning how many were removed so
+ * the caller can say so.
+ *
+ * Called when a series edit changes which occurrences exist or when they run. A
+ * skip or reschedule is pinned to a specific date under the old shape; left in
+ * place it silently keeps overriding the new one, so the series looks like it
+ * only partly saved.
+ */
+export async function clearBlockExceptions(
+  scheduleBlockId: string
+): Promise<number> {
+  const removed = await db
+    .delete(blockExceptions)
+    .where(eq(blockExceptions.scheduleBlockId, scheduleBlockId))
+    .returning({ id: blockExceptions.id });
+  return removed.length;
+}
+
 function mapException(e: typeof blockExceptions.$inferSelect): ExpandableException {
   return {
     occurrenceDate: e.occurrenceDate,

@@ -13,7 +13,11 @@ import {
   rateLimited,
 } from "@/lib/api";
 import { limitBlockWrite } from "@/lib/rate-limit";
-import { loadExpandInputs, releaseDeliveryClaims } from "@/lib/blocks-service";
+import {
+  loadExpandInputs,
+  releaseDeliveryClaims,
+  clearBlockExceptions,
+} from "@/lib/blocks-service";
 import { queueReminderScheduleSync } from "@/lib/cron/trigger";
 import { findConflictsForBlock } from "@/lib/recurrence/conflict-check";
 import type { ExpandInput } from "@/lib/recurrence/expand-occurrences";
@@ -136,8 +140,12 @@ export async function PATCH(req: Request, { params }: Params) {
 
     if (remindersMoved) await releaseDeliveryClaims(id);
 
+    // Overrides were pinned to the old shape; keeping them would silently
+    // override the new one. Report the count so the edit isn't silent.
+    const clearedOverrides = shapeChanged ? await clearBlockExceptions(id) : 0;
+
     queueReminderScheduleSync("block.update");
-    return NextResponse.json({ status: "updated", blockId: id });
+    return NextResponse.json({ status: "updated", blockId: id, clearedOverrides });
   } catch {
     return serverError("Could not update block.");
   }
