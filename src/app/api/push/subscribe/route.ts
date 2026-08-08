@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { pushSubscriptions } from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth";
 import { pushSubscribeInput } from "@/lib/validations";
-import { unauthorized, parseBody, serverError, rateLimited } from "@/lib/api";
+import {
+  unauthorized,
+  parseBody,
+  serverError,
+  rateLimited,
+  apiError,
+} from "@/lib/api";
 import { limitPushSubscribe } from "@/lib/rate-limit";
 
 // POST /api/push/subscribe — register a Web Push subscription for the user.
@@ -19,7 +26,7 @@ export async function POST(req: Request) {
   const { endpoint, keys } = parsed.data;
 
   try {
-    await db
+    const [row] = await db
       .insert(pushSubscriptions)
       .values({
         userId,
@@ -29,8 +36,25 @@ export async function POST(req: Request) {
       })
       .onConflictDoUpdate({
         target: pushSubscriptions.endpoint,
-        set: { userId, p256dhKey: keys.p256dh, authKey: keys.auth },
-      });
+        // Only refresh a row this user already owns. Without the predicate the
+        // update would reassign userId, handing one account's push channel to
+        // whoever posts its endpoint — the victim would stop receiving their
+        // reminders and start receiving the other account's.
+        setWhere: eq(pushSubscriptions.userId, userId),
+        set: { p256dhKey: keys.p256dh, authKey: keys.auth },
+      })
+      .returning({ id: pushSubscriptions.id });
+
+    // No row came back: the endpoint exists under a different account, so the
+    // conflict predicate matched nothing. The caller has to mint a fresh
+    // subscription instead of taking this one over.
+    if (!row) {
+      return apiError(
+        "conflict",
+        "This device is registered to another account. Re-subscribing will issue a new one.",
+        409
+      );
+    }
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch {
     return serverError("Could not save subscription.");

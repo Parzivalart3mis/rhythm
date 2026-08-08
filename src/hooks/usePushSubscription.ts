@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { apiFetch } from "@/lib/client";
+import { apiFetch, ApiClientError } from "@/lib/client";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -53,6 +53,14 @@ export function usePushSubscription() {
     refresh();
   }, [refresh]);
 
+  const registerWithServer = React.useCallback(async (sub: PushSubscription) => {
+    const json = sub.toJSON();
+    await apiFetch("/api/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+  }, []);
+
   const subscribe = React.useCallback(async () => {
     if (!vapidKey) return;
     setBusy(true);
@@ -66,25 +74,34 @@ export function usePushSubscription() {
         (await navigator.serviceWorker.getRegistration()) ??
         (await navigator.serviceWorker.register("/sw.js"));
       await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
+      const options: PushSubscriptionOptionsInit = {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      });
-      const json = sub.toJSON();
-      await apiFetch("/api/push/subscribe", {
-        method: "POST",
-        body: JSON.stringify({
-          endpoint: json.endpoint,
-          keys: json.keys,
-        }),
-      });
+      };
+
+      let sub = await reg.pushManager.subscribe(options);
+      try {
+        await registerWithServer(sub);
+      } catch (err) {
+        // 409 means this endpoint is still registered to a different account —
+        // e.g. someone else used this browser and never turned reminders off.
+        // subscribe() hands back that same existing subscription, so drop it and
+        // mint a fresh endpoint the server will accept.
+        if (err instanceof ApiClientError && err.status === 409) {
+          await sub.unsubscribe();
+          sub = await reg.pushManager.subscribe(options);
+          await registerWithServer(sub);
+        } else {
+          throw err;
+        }
+      }
       setStatus("subscribed");
     } catch {
       setStatus("default");
     } finally {
       setBusy(false);
     }
-  }, [vapidKey]);
+  }, [vapidKey, registerWithServer]);
 
   const unsubscribe = React.useCallback(async () => {
     setBusy(true);
