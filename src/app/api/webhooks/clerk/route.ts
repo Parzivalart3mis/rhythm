@@ -56,7 +56,10 @@ export async function POST(req: Request) {
       "svix-timestamp": svixTimestamp,
       "svix-signature": svixSignature,
     }) as ClerkEvent;
-  } catch {
+  } catch (err) {
+    // Usually a stale or mismatched CLERK_WEBHOOK_SECRET rather than an attack,
+    // and impossible to diagnose from the 400 alone.
+    console.error("Clerk webhook signature verification failed:", err);
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Invalid signature." } },
       { status: 400 }

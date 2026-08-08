@@ -153,8 +153,11 @@ export function expandBlock(
       ...RRule.parseString(block.rruleString),
       dtstart: utcDate(block.seriesStartDate),
     });
-  } catch {
-    return results; // malformed rule — emit nothing rather than crash a view
+  } catch (err) {
+    // Emit nothing rather than crash a view — but a rule that can't be parsed
+    // means a block silently vanishes from every view, which is worth knowing.
+    console.error(`Malformed rrule on block ${block.id}:`, block.rruleString, err);
+    return results;
   }
 
   const dates = rule.between(utcDate(rangeStart), utcDate(rangeEnd), true);

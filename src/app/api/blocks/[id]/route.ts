@@ -146,7 +146,8 @@ export async function PATCH(req: Request, { params }: Params) {
 
     queueReminderScheduleSync("block.update");
     return NextResponse.json({ status: "updated", blockId: id, clearedOverrides });
-  } catch {
+  } catch (err) {
+    console.error("Update block failed:", err);
     return serverError("Could not update block.");
   }
 }
@@ -164,7 +165,8 @@ export async function DELETE(_req: Request, { params }: Params) {
     await db.delete(scheduleBlocks).where(eq(scheduleBlocks.id, id));
     queueReminderScheduleSync("block.delete");
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("Delete block failed:", err);
     return serverError("Could not delete block.");
   }
 }

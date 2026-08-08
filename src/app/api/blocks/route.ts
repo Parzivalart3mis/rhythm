@@ -144,7 +144,8 @@ export async function POST(req: Request) {
       .returning({ id: scheduleBlocks.id });
     queueReminderScheduleSync("block.create");
     return NextResponse.json({ status: "created", blockId: created.id }, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("Create block failed:", err);
     return serverError("Could not create block.");
   }
 }

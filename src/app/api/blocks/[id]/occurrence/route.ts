@@ -67,7 +67,8 @@ export async function PATCH(req: Request, { params }: Params) {
 
     queueReminderScheduleSync("occurrence.upsert");
     return NextResponse.json({ status: "applied" });
-  } catch {
+  } catch (err) {
+    console.error("Update occurrence failed:", err);
     return serverError("Could not update occurrence.");
   }
 }

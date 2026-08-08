@@ -37,7 +37,8 @@ export async function POST(req: Request) {
       })
       .returning();
     return NextResponse.json({ category: created }, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("Create category failed:", err);
     return serverError("Could not create category.");
   }
 }

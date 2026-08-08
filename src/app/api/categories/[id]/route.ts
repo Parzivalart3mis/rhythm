@@ -65,7 +65,8 @@ export async function DELETE(_req: Request, { params }: Params) {
   try {
     await db.delete(categories).where(eq(categories.id, id));
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("Delete category failed:", err);
     return serverError("Could not delete category.");
   }
 }

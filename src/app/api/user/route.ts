@@ -43,7 +43,8 @@ export async function PATCH(req: Request) {
     // A timezone change moves every one of this user's reminder instants.
     if (parsed.data.timezone) queueReminderScheduleSync("user.timezone");
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("Update user settings failed:", err);
     return serverError("Could not update settings.");
   }
 }
