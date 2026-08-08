@@ -26,8 +26,9 @@ export const viewport: Viewport = {
   themeColor: "#4C5FD5",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Zoom stays enabled: the week grid renders at 10px and has to be
+  // magnifiable. The iOS focus-zoom this is usually pinned to prevent is
+  // already handled by 16px form controls.
   viewportFit: "cover",
 };
 
