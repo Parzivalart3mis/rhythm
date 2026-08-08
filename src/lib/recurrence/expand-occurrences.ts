@@ -166,6 +166,12 @@ export function expandBlock(
     if (ex.occurrenceDate >= rangeStart && ex.occurrenceDate <= rangeEnd) continue;
     const finalDate = ex.newDate ?? ex.occurrenceDate;
     if (finalDate < rangeStart || finalDate > rangeEnd) continue;
+    // The rule must still produce the date this exception overrides. Editing a
+    // series leaves its exceptions behind, and without this check an orphaned
+    // one keeps emitting an occurrence the schedule no longer contains — a
+    // phantom block that no amount of editing the series can remove.
+    const original = utcDate(ex.occurrenceDate);
+    if (rule.between(original, original, true).length === 0) continue;
     results.push(
       makeOccurrence(
         block,
