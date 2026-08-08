@@ -21,6 +21,7 @@ export interface OccurrenceView {
   reminderLeadMinutes: number;
   isRecurring: boolean;
   isException: boolean;
+  isSkipped: boolean;
   categoryName: string;
   categoryColor: string;
 }

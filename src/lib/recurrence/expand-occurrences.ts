@@ -49,6 +49,17 @@ export interface Occurrence {
   reminderLeadMinutes: number;
   isRecurring: boolean; // whether the parent block is a recurring series
   isException: boolean; // this occurrence was rescheduled
+  isSkipped: boolean; // hidden by a skip exception; only emitted on request
+}
+
+/** Skipped occurrences are dropped unless a caller explicitly asks for them. */
+export interface ExpandOptions {
+  /**
+   * Emit occurrences hidden by a skip exception, flagged `isSkipped`. The day
+   * view needs them so a skip can be undone — without a row on screen there is
+   * nothing left to tap.
+   */
+  includeSkipped?: boolean;
 }
 
 function utcDate(key: string): Date {
@@ -68,7 +79,8 @@ function makeOccurrence(
   date: string,
   startTime: string | null,
   endTime: string | null,
-  isException: boolean
+  isException: boolean,
+  isSkipped = false
 ): Occurrence {
   return {
     blockId: block.id,
@@ -82,6 +94,7 @@ function makeOccurrence(
     reminderLeadMinutes: block.reminderLeadMinutes,
     isRecurring: block.isRecurring,
     isException,
+    isSkipped,
   };
 }
 
@@ -92,9 +105,11 @@ function makeOccurrence(
 export function expandBlock(
   input: ExpandInput,
   rangeStart: string,
-  rangeEnd: string
+  rangeEnd: string,
+  options: ExpandOptions = {}
 ): Occurrence[] {
   const { block, exceptions } = input;
+  const { includeSkipped = false } = options;
   const exByDate = new Map(exceptions.map((e) => [e.occurrenceDate, e]));
   const results: Occurrence[] = [];
 
@@ -103,7 +118,14 @@ export function expandBlock(
     const d = block.taskDate;
     if (!d || d < rangeStart || d > rangeEnd) return results;
     const ex = exByDate.get(d);
-    if (ex?.exceptionType === "skip") return results;
+    if (ex?.exceptionType === "skip") {
+      if (includeSkipped) {
+        results.push(
+          makeOccurrence(block, d, block.startTime, block.endTime, false, true)
+        );
+      }
+      return results;
+    }
     if (ex?.exceptionType === "reschedule") {
       const finalDate = ex.newDate ?? d;
       if (finalDate < rangeStart || finalDate > rangeEnd) return results;
@@ -139,7 +161,14 @@ export function expandBlock(
   for (const dt of dates) {
     const origKey = keyFromUtc(dt);
     const ex = exByDate.get(origKey);
-    if (ex?.exceptionType === "skip") continue;
+    if (ex?.exceptionType === "skip") {
+      if (includeSkipped) {
+        results.push(
+          makeOccurrence(block, origKey, block.startTime, block.endTime, false, true)
+        );
+      }
+      continue;
+    }
     if (ex?.exceptionType === "reschedule") {
       const finalDate = ex.newDate ?? origKey;
       // Rescheduled out of the visible range — drop here; captured below if it
@@ -190,11 +219,12 @@ export function expandBlock(
 export function expandOccurrences(
   inputs: ExpandInput[],
   rangeStart: string,
-  rangeEnd: string
+  rangeEnd: string,
+  options: ExpandOptions = {}
 ): Occurrence[] {
   const all: Occurrence[] = [];
   for (const input of inputs) {
-    all.push(...expandBlock(input, rangeStart, rangeEnd));
+    all.push(...expandBlock(input, rangeStart, rangeEnd, options));
   }
   all.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;

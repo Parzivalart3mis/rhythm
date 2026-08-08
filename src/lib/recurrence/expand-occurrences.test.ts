@@ -56,6 +56,37 @@ describe("expandBlock — recurring", () => {
     expect(occ.map((o) => o.date)).toEqual(["2026-01-05", "2026-01-09"]);
   });
 
+  it("emits skipped occurrences flagged, only when asked", () => {
+    const input: ExpandInput = {
+      block: baseRecurring,
+      exceptions: [
+        {
+          occurrenceDate: "2026-01-07",
+          exceptionType: "skip",
+          newStartTime: null,
+          newEndTime: null,
+          newDate: null,
+        },
+      ],
+    };
+    const withSkipped = expandBlock(input, "2026-01-05", "2026-01-11", {
+      includeSkipped: true,
+    });
+    expect(withSkipped.map((o) => o.date)).toEqual([
+      "2026-01-05",
+      "2026-01-07",
+      "2026-01-09",
+    ]);
+    expect(withSkipped.find((o) => o.date === "2026-01-07")?.isSkipped).toBe(true);
+    expect(withSkipped.filter((o) => o.isSkipped)).toHaveLength(1);
+
+    // Callers that don't opt in — conflict checks, the reminder planner — must
+    // still never see a skipped occurrence.
+    expect(
+      expandBlock(input, "2026-01-05", "2026-01-11").some((o) => o.isSkipped)
+    ).toBe(false);
+  });
+
   it("reschedules an occurrence's time in place", () => {
     const occ = expandBlock(
       {

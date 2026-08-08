@@ -18,6 +18,7 @@ function occ(partial: Partial<Occurrence>): Occurrence {
     reminderLeadMinutes: 10,
     isRecurring: false,
     isException: false,
+    isSkipped: false,
     ...partial,
   };
 }

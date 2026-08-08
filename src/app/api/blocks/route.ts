@@ -19,6 +19,7 @@ import { findConflictsForBlock } from "@/lib/recurrence/conflict-check";
 import {
   expandOccurrences,
   type ExpandInput,
+  type Occurrence,
 } from "@/lib/recurrence/expand-occurrences";
 import { viewRange } from "@/lib/view-range";
 import { addDaysKey } from "@/lib/time";
@@ -49,16 +50,22 @@ export async function GET(req: Request) {
   ]);
 
   const catMap = new Map(cats.map((c) => [c.id, c]));
-  const occurrences = expandOccurrences(inputs, start, end).map((o) => {
+  const decorate = (o: Occurrence) => {
     const cat = catMap.get(o.categoryId);
     return {
       ...o,
       categoryName: cat?.name ?? "Uncategorized",
       categoryColor: cat?.colorHex ?? "#64748B",
     };
-  });
+  };
 
-  return NextResponse.json({ range: { start, end }, occurrences });
+  // Skipped occurrences travel in their own list so the day view can offer to
+  // restore them without the grids rendering them as real blocks.
+  const expanded = expandOccurrences(inputs, start, end, { includeSkipped: true });
+  const occurrences = expanded.filter((o) => !o.isSkipped).map(decorate);
+  const skipped = expanded.filter((o) => o.isSkipped).map(decorate);
+
+  return NextResponse.json({ range: { start, end }, occurrences, skipped });
 }
 
 // POST /api/blocks — create, with a server-side conflict pre-check.

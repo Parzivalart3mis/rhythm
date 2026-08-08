@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { Bell } from "lucide-react";
+import { Bell, Undo2, Loader2 } from "lucide-react";
 import { useApp } from "@/components/app-shell";
+import { useToast } from "@/components/ui/toast";
+import { apiFetch, ApiClientError } from "@/lib/client";
 import { useSchedule } from "@/hooks/useSchedule";
 import { ViewSwitcher } from "@/components/view-switcher";
 import { DateNav } from "@/components/date-nav";
@@ -14,8 +16,32 @@ import { cn } from "@/lib/utils";
 
 export default function DayPage() {
   const { openOccurrenceEditor, bumpRefresh } = useApp();
+  const { toast } = useToast();
   const [dateKey, setDateKey] = React.useState(() => toDateKey(new Date()));
-  const { occurrences, loading, error } = useSchedule("day", dateKey);
+  const { occurrences, skipped, loading, error } = useSchedule("day", dateKey);
+  const [restoring, setRestoring] = React.useState<string | null>(null);
+
+  // Undo a skip. Without this the occurrence is gone from every view, leaving
+  // nothing to tap and no way back short of rebuilding the series.
+  async function restore(occ: OccurrenceView) {
+    const key = occ.blockId + occ.date;
+    setRestoring(key);
+    try {
+      await apiFetch(
+        `/api/blocks/${occ.blockId}/occurrence?date=${occ.date}`,
+        { method: "DELETE" }
+      );
+      toast("Occurrence restored.", "success");
+      bumpRefresh();
+    } catch (e) {
+      toast(
+        e instanceof ApiClientError ? e.message : "Could not restore.",
+        "error"
+      );
+    } finally {
+      setRestoring(null);
+    }
+  }
 
   // Support deep-linking from the month view: /day?date=YYYY-MM-DD.
   React.useEffect(() => {
@@ -46,7 +72,7 @@ export default function DayPage() {
         <AgendaSkeleton />
       ) : error ? (
         <ErrorState message={error} onRetry={bumpRefresh} />
-      ) : occurrences.length === 0 ? (
+      ) : occurrences.length === 0 && skipped.length === 0 ? (
         <EmptyState message="Nothing scheduled. Tap + to add your first block." />
       ) : (
         <div className="space-y-4 px-4 py-4">
@@ -89,8 +115,66 @@ export default function DayPage() {
               ) : null}
             </section>
           ) : null}
+
+          {skipped.length > 0 ? (
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Skipped
+              </h3>
+              {skipped.map((o) => (
+                <SkippedRow
+                  key={o.blockId + o.date}
+                  occ={o}
+                  busy={restoring === o.blockId + o.date}
+                  onRestore={() => restore(o)}
+                />
+              ))}
+            </section>
+          ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+function SkippedRow({
+  occ,
+  busy,
+  onRestore,
+}: {
+  occ: OccurrenceView;
+  busy: boolean;
+  onRestore: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-card p-3 opacity-60">
+      <span
+        className="w-1 shrink-0 self-stretch rounded-full"
+        style={{ backgroundColor: occ.categoryColor }}
+      />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-medium text-foreground line-through">
+          {occ.title}
+        </span>
+        <span className="tabular-nums text-xs text-muted-foreground">
+          {occ.startTime && occ.endTime
+            ? `${formatTime12(occ.startTime)}–${formatTime12(occ.endTime)} · skipped`
+            : "Skipped"}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onRestore}
+        disabled={busy}
+        className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-surface-offset disabled:opacity-50"
+      >
+        {busy ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Undo2 className="size-3.5" />
+        )}
+        Restore
+      </button>
     </div>
   );
 }
