@@ -122,6 +122,60 @@ describe("expandBlock — recurring", () => {
     expect(occ.some((o) => o.date === "2026-01-12")).toBe(true);
   });
 
+  // A series edit rewrites the rule but leaves block_exceptions behind. An
+  // orphaned reschedule must not keep emitting an occurrence the rule no longer
+  // produces — that phantom cannot be removed by editing the series again.
+  describe("orphaned reschedule exceptions", () => {
+    // Original Fri 2026-01-09 moved to Mon 2026-01-12, viewed from the week that
+    // starts on the 12th — so the original date sits outside the range and only
+    // the trailing "moved into range" pass can emit it.
+    const movedIn = {
+      occurrenceDate: "2026-01-09",
+      exceptionType: "reschedule" as const,
+      newStartTime: null,
+      newEndTime: null,
+      newDate: "2026-01-12",
+    };
+
+    it("keeps the occurrence while the rule still produces its original date", () => {
+      const occ = expandBlock(
+        { block: baseRecurring, exceptions: [movedIn] },
+        "2026-01-12",
+        "2026-01-18"
+      );
+      expect(occ.some((o) => o.date === "2026-01-12")).toBe(true);
+    });
+
+    it("drops it once the rule no longer produces the original date", () => {
+      // Re-scoped to Tue/Thu, so Friday the 9th is no longer an occurrence.
+      const occ = expandBlock(
+        {
+          block: { ...baseRecurring, rruleString: "FREQ=WEEKLY;BYDAY=TU,TH" },
+          exceptions: [movedIn],
+        },
+        "2026-01-12",
+        "2026-01-18"
+      );
+      expect(occ.some((o) => o.date === "2026-01-12")).toBe(false);
+    });
+
+    it("drops it when the rule produces nothing in range at all", () => {
+      const occ = expandBlock(
+        {
+          block: {
+            ...baseRecurring,
+            rruleString: "FREQ=WEEKLY;BYDAY=FR",
+            seriesStartDate: "2027-01-01",
+          },
+          exceptions: [movedIn],
+        },
+        "2026-01-12",
+        "2026-01-18"
+      );
+      expect(occ).toHaveLength(0);
+    });
+  });
+
   it("drops an occurrence rescheduled OUT of the range", () => {
     const occ = expandBlock(
       {
