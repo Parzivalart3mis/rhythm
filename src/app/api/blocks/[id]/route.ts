@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { limitBlockWrite } from "@/lib/rate-limit";
 import { loadExpandInputs } from "@/lib/blocks-service";
+import { queueReminderScheduleSync } from "@/lib/cron/trigger";
 import { findConflictsForBlock } from "@/lib/recurrence/conflict-check";
 import type { ExpandInput } from "@/lib/recurrence/expand-occurrences";
 import { addDaysKey } from "@/lib/time";
@@ -117,6 +118,7 @@ export async function PATCH(req: Request, { params }: Params) {
         updatedAt: new Date(),
       })
       .where(eq(scheduleBlocks.id, id));
+    queueReminderScheduleSync("block.update");
     return NextResponse.json({ status: "updated", blockId: id });
   } catch {
     return serverError("Could not update block.");
@@ -134,6 +136,7 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   try {
     await db.delete(scheduleBlocks).where(eq(scheduleBlocks.id, id));
+    queueReminderScheduleSync("block.delete");
     return NextResponse.json({ ok: true });
   } catch {
     return serverError("Could not delete block.");

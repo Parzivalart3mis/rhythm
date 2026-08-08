@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { limitBlockWrite } from "@/lib/rate-limit";
 import { loadExpandInputs } from "@/lib/blocks-service";
+import { queueReminderScheduleSync } from "@/lib/cron/trigger";
 import { findConflictsForBlock } from "@/lib/recurrence/conflict-check";
 import {
   expandOccurrences,
@@ -134,6 +135,7 @@ export async function POST(req: Request) {
         reminderLeadMinutes: data.reminderLeadMinutes,
       })
       .returning({ id: scheduleBlocks.id });
+    queueReminderScheduleSync("block.create");
     return NextResponse.json({ status: "created", blockId: created.id }, { status: 201 });
   } catch {
     return serverError("Could not create block.");

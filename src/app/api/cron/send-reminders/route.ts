@@ -7,23 +7,29 @@ import { loadExpandInputs } from "@/lib/blocks-service";
 import { expandOccurrences } from "@/lib/recurrence/expand-occurrences";
 import { sendPush } from "@/lib/push/send-push";
 import { addDaysKey } from "@/lib/time";
+import { cronAuthError } from "@/lib/cron/auth";
+import { syncReminderSchedule } from "@/lib/cron/sync";
+import type { PlanUser } from "@/lib/cron/schedule-plan";
+import {
+  REMINDER_EARLY_TOLERANCE_MS,
+  REMINDER_LATE_GRACE_MS,
+} from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Runs every minute (Vercel Cron). For each user we expand a ±1 day window in
-// their timezone, and for any timed occurrence whose reminder window is currently
-// open and not yet delivered, we send a web-push and log it (unique index on
-// (block, occurrenceDate) makes delivery idempotent).
+// Called by cron-job.org at times derived from the timetable itself (see
+// src/lib/cron/schedule-plan.ts). For each user we expand a ±1 day window in
+// their timezone and deliver any occurrence whose reminder window is currently
+// open; a unique index on (block, occurrenceDate) makes that idempotent, so the
+// endpoint is safe to call repeatedly and safe for the scheduler to retry.
+//
+// The same run then reconciles the remote job's schedule, which is what keeps
+// the two in step after a DST transition or as the lookahead window rolls
+// forward. That reconcile is a no-op unless the schedule fingerprint changed.
 export async function POST(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  if (secret && authHeader !== `Bearer ${secret}`) {
-    return NextResponse.json(
-      { error: { code: "unauthorized", message: "Invalid cron secret." } },
-      { status: 401 }
-    );
-  }
+  const authError = cronAuthError(req);
+  if (authError) return authError;
 
   const now = new Date();
   let sent = 0;
@@ -32,16 +38,20 @@ export async function POST(req: Request) {
 
   const allUsers = await db.select().from(users);
 
+  // Timetables are read once and reused for both dispatch and planning.
+  const planUsers: PlanUser[] = [];
+
   for (const user of allUsers) {
     const tz = user.timezone || "UTC";
+
+    const inputs = await loadExpandInputs(user.id);
+    if (inputs.length === 0) continue;
+    planUsers.push({ timezone: tz, inputs });
 
     // Local "today" in the user's zone, plus neighbours to cover tz edges.
     const todayKey = formatInTimeZone(now, tz, "yyyy-MM-dd");
     const startKey = addDaysKey(todayKey, -1);
     const endKey = addDaysKey(todayKey, 1);
-
-    const inputs = await loadExpandInputs(user.id);
-    if (inputs.length === 0) continue;
 
     const occurrences = expandOccurrences(inputs, startKey, endKey).filter(
       (o) => o.startTime !== null
@@ -60,8 +70,16 @@ export async function POST(req: Request) {
         startInstant.getTime() - occ.reminderLeadMinutes * 60_000
       );
 
-      // Window is open when the reminder time has arrived but the block hasn't started.
-      if (!(reminderInstant <= now && now < startInstant)) continue;
+      // Open a little before the exact instant (the scheduler's clock is not
+      // ours) and close at the block's start — but never sooner than a short
+      // grace period, which is what lets a 0-minute lead fire at all and lets a
+      // missed run be caught up by the next one.
+      const windowOpens = reminderInstant.getTime() - REMINDER_EARLY_TOLERANCE_MS;
+      const windowCloses = Math.max(
+        startInstant.getTime(),
+        reminderInstant.getTime() + REMINDER_LATE_GRACE_MS
+      );
+      if (!(now.getTime() >= windowOpens && now.getTime() < windowCloses)) continue;
 
       // Claim the delivery slot atomically; if the row already exists, another
       // run handled it.
@@ -84,12 +102,16 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const minsLabel = occ.reminderLeadMinutes;
+      // Phrase against the actual send time, not the nominal lead, so a run
+      // that lands late still reads correctly.
+      const minsToStart = Math.round(
+        (startInstant.getTime() - now.getTime()) / 60_000
+      );
       const payload = {
         title: occ.title,
         body:
-          minsLabel > 0
-            ? `Starts in ${minsLabel} min at ${occ.startTime}`
+          minsToStart >= 1
+            ? `Starts in ${minsToStart} min at ${occ.startTime}`
             : `Starting now at ${occ.startTime}`,
         blockId: occ.blockId,
         url: "/day",
@@ -127,10 +149,19 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, failed, skipped });
+  const sync = await syncReminderSchedule({
+    reason: "dispatch",
+    planUsers,
+    now,
+  }).catch((err) => ({
+    status: "error" as const,
+    message: String(err),
+  }));
+
+  return NextResponse.json({ ok: true, sent, failed, skipped, sync });
 }
 
-// Allow manual GET trigger in dev only (still requires the secret in prod header).
+// Allow a manual GET trigger (still requires the secret header in production).
 export async function GET(req: Request) {
   return POST(req);
 }

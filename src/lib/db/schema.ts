@@ -124,6 +124,21 @@ export const reminderDeliveries = pgTable(
   ]
 );
 
+// Singleton bookkeeping for the external scheduler (cron-job.org). The reminder
+// firing times are derived from the timetable, so this row remembers which
+// remote job we own and a fingerprint of the schedule we last pushed — the API
+// is only called when that fingerprint changes (their quota is 100 req/day).
+export const cronSyncState = pgTable("cron_sync_state", {
+  id: text("id").primaryKey(), // 'reminder-job'
+  provider: text("provider").notNull().default("cron-job.org"),
+  jobId: integer("job_id"),
+  fingerprint: text("fingerprint"),
+  scheduleJson: text("schedule_json"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  lastError: text("last_error"),
+});
+
 // ---- Relations ----
 export const usersRelations = relations(users, ({ many }) => ({
   categories: many(categories),
@@ -159,3 +174,4 @@ export type ScheduleBlock = typeof scheduleBlocks.$inferSelect;
 export type BlockException = typeof blockExceptions.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type ReminderDelivery = typeof reminderDeliveries.$inferSelect;
+export type CronSyncState = typeof cronSyncState.$inferSelect;

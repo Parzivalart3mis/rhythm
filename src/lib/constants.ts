@@ -32,3 +32,33 @@ export const DEFAULT_REMINDER_LEAD_MINUTES = 10;
 // Rolling window (days) used when expanding recurring occurrences for conflict
 // detection at write time.
 export const CONFLICT_WINDOW_DAYS = 60;
+
+// ---- Reminder dispatch ----
+
+// The external scheduler fires on the minute but not to the second, and its
+// clock is not ours. Treat a reminder as due slightly before its exact instant
+// so a run that lands a few seconds early still delivers.
+export const REMINDER_EARLY_TOLERANCE_MS = 30_000;
+
+// How long after the reminder instant a delivery is still worth making — this
+// is what lets a 0-minute lead ("starting now") fire at all, and lets a missed
+// run be caught up by the next one.
+export const REMINDER_LATE_GRACE_MS = 5 * 60_000;
+
+// ---- Reminder schedule planning ----
+
+// How far ahead the planner expands the timetable when deriving firing times.
+// Must exceed 7 so a weekly series always contributes a time even on the day it
+// occurs, which keeps the plan stable instead of churning once per day.
+export const SCHEDULE_LOOKAHEAD_DAYS = 8;
+
+// Extra UTC hours always included so the endpoint keeps running (and therefore
+// keeps re-checking its own schedule) even when the timetable is empty.
+export const HEARTBEAT_UTC_HOURS = [2, 10, 18];
+
+// Minute used for the heartbeat when the timetable contributes no times at all.
+export const HEARTBEAT_FALLBACK_MINUTE = 11;
+
+// After a failed sync, wait this long before spending more of the provider's
+// daily API quota on a retry.
+export const SYNC_FAILURE_BACKOFF_MS = 5 * 60_000;

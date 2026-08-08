@@ -5,6 +5,7 @@ import { scheduleBlocks, blockExceptions } from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth";
 import { occurrenceEdit } from "@/lib/validations";
 import { unauthorized, notFound, parseBody, apiError, serverError } from "@/lib/api";
+import { queueReminderScheduleSync } from "@/lib/cron/trigger";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -55,6 +56,7 @@ export async function PATCH(req: Request, { params }: Params) {
           newDate: values.newDate,
         },
       });
+    queueReminderScheduleSync("occurrence.upsert");
     return NextResponse.json({ status: "applied" });
   } catch {
     return serverError("Could not update occurrence.");
@@ -87,5 +89,6 @@ export async function DELETE(req: Request, { params }: Params) {
         eq(blockExceptions.occurrenceDate, date)
       )
     );
+  queueReminderScheduleSync("occurrence.restore");
   return NextResponse.json({ ok: true });
 }

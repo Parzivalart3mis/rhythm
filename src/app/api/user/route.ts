@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth";
 import { unauthorized, parseBody, serverError } from "@/lib/api";
+import { queueReminderScheduleSync } from "@/lib/cron/trigger";
 
 export async function GET() {
   const userId = await requireUser();
@@ -39,6 +40,8 @@ export async function PATCH(req: Request) {
 
   try {
     await db.update(users).set(parsed.data).where(eq(users.id, userId));
+    // A timezone change moves every one of this user's reminder instants.
+    if (parsed.data.timezone) queueReminderScheduleSync("user.timezone");
     return NextResponse.json({ ok: true });
   } catch {
     return serverError("Could not update settings.");
