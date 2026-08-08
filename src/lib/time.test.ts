@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
-  timeToMinutes,
-  minutesToTime,
-  formatTime12,
-  intervalsOverlap,
   addDaysKey,
   dateRangeKeys,
+  formatTime12,
+  intervalsOverlap,
+  minutesToTime,
+  timeToMinutes,
+  zonedNow,
 } from "./time";
 
 describe("time helpers", () => {
@@ -38,5 +39,47 @@ describe("time helpers", () => {
       "2026-01-07",
     ]);
     expect(dateRangeKeys("2026-01-07", "2026-01-05")).toEqual([]);
+  });
+});
+
+describe("zonedNow", () => {
+  // 2026-08-08T02:30:00Z — still Aug 7 in Chicago (UTC-5 in summer).
+  const instant = new Date("2026-08-08T02:30:00Z");
+
+  it("reports the local date and minutes for a zone behind UTC", () => {
+    expect(zonedNow(instant, "America/Chicago")).toEqual({
+      dateKey: "2026-08-07",
+      minutes: 21 * 60 + 30,
+    });
+  });
+
+  it("reports the local date and minutes for a zone ahead of UTC", () => {
+    expect(zonedNow(instant, "Asia/Kolkata")).toEqual({
+      dateKey: "2026-08-08",
+      minutes: 8 * 60,
+    });
+  });
+
+  it("agrees with UTC when asked for UTC", () => {
+    expect(zonedNow(instant, "UTC")).toEqual({
+      dateKey: "2026-08-08",
+      minutes: 2 * 60 + 30,
+    });
+  });
+
+  it("treats local midnight as minute 0, not 1440", () => {
+    // 2026-08-08T05:00:00Z is exactly midnight in Chicago.
+    const midnight = new Date("2026-08-08T05:00:00Z");
+    expect(zonedNow(midnight, "America/Chicago")).toEqual({
+      dateKey: "2026-08-08",
+      minutes: 0,
+    });
+  });
+
+  it("falls back to the device zone instead of throwing on a bad zone", () => {
+    const out = zonedNow(instant, "Not/AZone");
+    expect(out.dateKey).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(out.minutes).toBeGreaterThanOrEqual(0);
+    expect(out.minutes).toBeLessThan(1440);
   });
 });

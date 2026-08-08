@@ -15,7 +15,9 @@ import {
   timeToMinutes,
   minutesToTime,
   formatTime12,
+  zonedNow,
 } from "@/lib/time";
+import { useNow } from "@/hooks/useNow";
 import type { OccurrenceView } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -79,13 +81,13 @@ function placeDay(dayBlocks: OccurrenceView[], gridStartMin: number): Placed[] {
 }
 
 export default function WeekPage() {
-  const { openOccurrenceEditor, bumpRefresh } = useApp();
+  const { openOccurrenceEditor, bumpRefresh, timezone } = useApp();
   const [anchor, setAnchor] = React.useState(() => toDateKey(new Date()));
   const { occurrences, loading, error } = useSchedule("week", anchor);
+  const { dateKey: todayKey, minutes: nowMin } = zonedNow(useNow(), timezone);
 
   const weekStartKey = toDateKey(startOfWeek(fromDateKey(anchor), { weekStartsOn: 1 }));
   const days = Array.from({ length: 7 }, (_, i) => addDaysKey(weekStartKey, i));
-  const todayKey = toDateKey(new Date());
 
   const timed = occurrences.filter((o) => o.startTime !== null);
   const tasks = occurrences.filter((o) => o.startTime === null);
@@ -211,8 +213,6 @@ export default function WeekPage() {
                 {days.map((d) => {
                   const placed = placeDay(byDay.get(d) ?? [], gridStartMin);
                   const isToday = d === todayKey;
-                  const nowMin =
-                    new Date().getHours() * 60 + new Date().getMinutes();
                   const showNow =
                     isToday && nowMin >= gridStartMin && nowMin <= gridEndMin;
                   return (

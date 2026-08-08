@@ -16,6 +16,12 @@ interface EditorTarget {
 }
 
 interface AppContextValue {
+  /**
+   * The zone reminders fire in, from the users row. Views format "now" against
+   * this rather than the device clock so the UI can't disagree with the
+   * schedule after travel. Seeded from the device so first render is sane.
+   */
+  timezone: string;
   categories: Category[];
   categoriesLoading: boolean;
   refreshCategories: () => Promise<void>;
@@ -27,6 +33,14 @@ interface AppContextValue {
 
 const AppContext = React.createContext<AppContextValue | null>(null);
 
+function deviceTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 export function useApp() {
   const ctx = React.useContext(AppContext);
   if (!ctx) throw new Error("useApp must be used within AppShell");
@@ -35,6 +49,7 @@ export function useApp() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
+  const [timezone, setTimezone] = React.useState<string>(deviceTimezone);
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = React.useState(true);
   const [refreshKey, setRefreshKey] = React.useState(0);
@@ -63,6 +78,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     refreshCategories();
   }, [refreshCategories]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ user?: { timezone?: string } }>("/api/user")
+      .then((data) => {
+        const tz = data.user?.timezone;
+        if (!cancelled && tz) setTimezone(tz);
+      })
+      .catch(() => {
+        // Keep the device zone; a missing preference isn't worth a toast.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const openEditor = React.useCallback((target?: EditorTarget) => {
     setEditorTarget(target ?? { prefillDate: toDateKey(new Date()) });
     setEditorOpen(true);
@@ -74,6 +104,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value: AppContextValue = {
+    timezone,
     categories,
     categoriesLoading,
     refreshCategories,

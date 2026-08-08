@@ -42,6 +42,46 @@ export function fromDateKey(key: string): Date {
   return new Date(y, m - 1, d);
 }
 
+/**
+ * Where "now" falls in a given IANA zone: the local date key and minutes since
+ * local midnight.
+ *
+ * The views used to read the device clock directly, which disagrees with the
+ * schedule whenever the device's zone differs from the one reminders fire in.
+ * Falls back to the device's own zone if `timeZone` is unusable, rather than
+ * throwing inside a render.
+ */
+export function zonedNow(
+  now: Date,
+  timeZone: string
+): { dateKey: string; minutes: number } {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(now);
+  } catch {
+    return {
+      dateKey: toDateKey(now),
+      minutes: now.getHours() * 60 + now.getMinutes(),
+    };
+  }
+  const at = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+  // hourCycle h23 still reports midnight as "24" in some environments.
+  const hour = Number(at("hour")) % 24;
+  return {
+    dateKey: `${at("year")}-${at("month")}-${at("day")}`,
+    minutes: hour * 60 + Number(at("minute")),
+  };
+}
+
 /** Do two [start,end) minute intervals overlap? Touching edges do not overlap. */
 export function intervalsOverlap(
   aStart: number,

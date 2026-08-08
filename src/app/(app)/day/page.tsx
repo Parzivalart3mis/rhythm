@@ -10,13 +10,23 @@ import { useSchedule } from "@/hooks/useSchedule";
 import { ViewSwitcher } from "@/components/view-switcher";
 import { DateNav } from "@/components/date-nav";
 import { EmptyState, ErrorState, AgendaSkeleton } from "@/components/view-states";
-import { toDateKey, fromDateKey, addDaysKey, formatTime12, timeToMinutes } from "@/lib/time";
+import {
+  toDateKey,
+  fromDateKey,
+  addDaysKey,
+  formatTime12,
+  timeToMinutes,
+  zonedNow,
+} from "@/lib/time";
+import { useNow } from "@/hooks/useNow";
 import type { OccurrenceView } from "@/types";
 import { cn } from "@/lib/utils";
 
 export default function DayPage() {
-  const { openOccurrenceEditor, bumpRefresh } = useApp();
+  const { openOccurrenceEditor, bumpRefresh, timezone } = useApp();
   const { toast } = useToast();
+  // Ticks, so the Now line tracks the clock instead of freezing at page load.
+  const { dateKey: todayKey, minutes: nowMinutes } = zonedNow(useNow(), timezone);
   const [dateKey, setDateKey] = React.useState(() => toDateKey(new Date()));
   const { occurrences, skipped, loading, error } = useSchedule("day", dateKey);
   const [restoring, setRestoring] = React.useState<string | null>(null);
@@ -49,10 +59,9 @@ export default function DayPage() {
     if (param && /^\d{4}-\d{2}-\d{2}$/.test(param)) setDateKey(param);
   }, []);
 
-  const isToday = dateKey === toDateKey(new Date());
+  const isToday = dateKey === todayKey;
   const tasks = occurrences.filter((o) => o.startTime === null);
   const timed = occurrences.filter((o) => o.startTime !== null);
-  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
   return (
     <div>
@@ -64,7 +73,7 @@ export default function DayPage() {
           label={format(fromDateKey(dateKey), "EEE, MMM d")}
           onPrev={() => setDateKey((d) => addDaysKey(d, -1))}
           onNext={() => setDateKey((d) => addDaysKey(d, 1))}
-          onToday={() => setDateKey(toDateKey(new Date()))}
+          onToday={() => setDateKey(todayKey)}
         />
       </div>
 
