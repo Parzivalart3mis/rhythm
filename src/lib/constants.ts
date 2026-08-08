@@ -62,3 +62,12 @@ export const HEARTBEAT_FALLBACK_MINUTE = 11;
 // After a failed sync, wait this long before spending more of the provider's
 // daily API quota on a retry.
 export const SYNC_FAILURE_BACKOFF_MS = 5 * 60_000;
+
+// Reconcile at least this often even when nothing changed, so a job that was
+// edited, disabled or deleted by hand in the provider's console gets repaired.
+// Costs at most one API call per day against a 100/day quota.
+export const SYNC_MAX_AGE_MS = 24 * 60 * 60_000;
+
+// cron-job.org caps free-account executions at 30s (sustaining members get
+// more). Asking for longer is rejected, so this is the ceiling we request.
+export const CRONJOB_REQUEST_TIMEOUT_SECONDS = 30;

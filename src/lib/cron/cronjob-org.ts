@@ -6,6 +6,10 @@ import type { CronSchedule } from "./schedule-plan";
 
 const API_BASE = "https://api.cron-job.org";
 
+// The dispatch endpoint reconciles inline and cron-job.org kills free-account
+// executions at 30s, so an unresponsive API must not eat that budget.
+const REQUEST_TIMEOUT_MS = 10_000;
+
 /** cron-job.org's requestMethod enum (0=GET, 1=POST, ...). */
 export const REQUEST_METHOD_POST = 1;
 
@@ -63,6 +67,7 @@ async function request<T>(
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
     throw new CronJobOrgError(`Network error calling ${path}: ${String(err)}`, 0);

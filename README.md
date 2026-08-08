@@ -146,9 +146,24 @@ timetable produces the same hash every day, so an unchanged schedule costs one i
 and no network call. Failures back off for 5 minutes so a misconfiguration can't drain the
 quota.
 
+**Why it still re-pushes daily.** A matching hash only proves *this app* changed nothing —
+the job could have been disabled, re-timezoned or deleted by hand in the console. So the
+reconcile also runs when the last successful sync is over 24h old, which repairs manual
+drift and re-enables a job that cron-job.org auto-disabled (it does that after 25
+consecutive failures). Worst case that is one extra API call per day.
+
+**Free-account limits this is built around:** 30s execution timeout (the job is configured
+for exactly that; API calls out to cron-job.org abort at 10s so they can't eat the budget),
+64 KB response, 100 API requests/day, one API key per account, no cap on job count.
+
 **Setup.**
 
-1. Create a cron-job.org account and generate an API key (Settings → API).
+1. Create a cron-job.org account, then Settings → API Keys → **Create API key**. A free
+   account gets exactly one (the page shows `Quota: 0 / 1`), so if you also use this
+   account for another project, both share the key.
+
+   **Leave "IP Address Restriction" empty.** Vercel's egress IPs are dynamic, and a
+   restricted key returns HTTP 403 on every sync.
 2. Set `CRONJOB_ORG_API_KEY`, `CRON_SECRET` and `NEXT_PUBLIC_APP_URL` in Vercel
    (Production + Preview), then redeploy.
 3. Bootstrap the job — this creates it, points it at your deployment, and attaches the
@@ -170,10 +185,17 @@ quota.
    This is a dry run — it reports `reminderTimes`, `firingsPerDay` and the last sync state
    without calling the provider.
 
-An existing job already pointing at `/api/cron/send-reminders` is adopted rather than
-duplicated, so a job created by hand in their UI is picked up on the first sync. Without
-`CRONJOB_ORG_API_KEY` the app never calls out and the job's schedule is left exactly as you
-configured it — reminders still work, they just don't follow the timetable automatically.
+**Don't hand-edit the job.** Its schedule is written in **UTC** on purpose — that is the
+shared clock that lets one job serve every timezone. Your account's default timezone
+(Settings → Default timezone) only applies to jobs created through their UI and does not
+affect this one; switching the job to a local zone in the console would shift every reminder
+by the UTC offset. Any manual edit is reverted by the next reconcile anyway.
+
+Adoption matches on the **exact** target URL, so other jobs in the same account are left
+alone, and a job you created by hand for this endpoint is picked up instead of duplicated.
+Without `CRONJOB_ORG_API_KEY` the app never calls out and the job's schedule is left exactly
+as you configured it — reminders still work, they just don't follow the timetable
+automatically.
 
 ## Out of scope (V1)
 

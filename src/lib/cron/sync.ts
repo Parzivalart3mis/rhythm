@@ -2,7 +2,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cronSyncState, users } from "@/lib/db/schema";
 import { loadExpandInputs } from "@/lib/blocks-service";
-import { SYNC_FAILURE_BACKOFF_MS } from "@/lib/constants";
+import {
+  CRONJOB_REQUEST_TIMEOUT_SECONDS,
+  SYNC_FAILURE_BACKOFF_MS,
+  SYNC_MAX_AGE_MS,
+} from "@/lib/constants";
 import {
   buildSchedulePlan,
   fingerprintOf,
@@ -105,7 +109,7 @@ function desiredJob(
     enabled: true,
     title: process.env.CRONJOB_ORG_JOB_TITLE?.trim() || "Rhythm — reminder dispatch",
     saveResponses: true,
-    requestTimeout: 60,
+    requestTimeout: CRONJOB_REQUEST_TIMEOUT_SECONDS,
     requestMethod: REQUEST_METHOD_POST,
     schedule: plan.schedule,
     extendedData: { headers: { Authorization: `Bearer ${cronSecret}` } },
@@ -164,7 +168,14 @@ export async function syncReminderSchedule(
   });
   const state = await readState();
 
-  if (!force && state?.jobId != null && state.fingerprint === fingerprint) {
+  // A matching fingerprint only proves *we* haven't changed anything — the job
+  // itself could have been disabled or re-timezoned by hand in their console, so
+  // re-push it once a day regardless.
+  const stale =
+    !state?.lastSyncedAt ||
+    now.getTime() - state.lastSyncedAt.getTime() >= SYNC_MAX_AGE_MS;
+
+  if (!force && !stale && state?.jobId != null && state.fingerprint === fingerprint) {
     return { ...base, status: "unchanged", jobId: state.jobId, fingerprint };
   }
 
