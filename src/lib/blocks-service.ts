@@ -1,8 +1,42 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { scheduleBlocks, blockExceptions } from "@/lib/db/schema";
+import {
+  scheduleBlocks,
+  blockExceptions,
+  reminderDeliveries,
+} from "@/lib/db/schema";
 import type { ExpandInput, ExpandableException } from "@/lib/recurrence/expand-occurrences";
-import { normalizeTime } from "@/lib/time";
+import { addDaysKey, normalizeTime, toDateKey } from "@/lib/time";
+
+/**
+ * Release reminder-delivery claims for a block so a changed schedule can notify
+ * again. A delivery row is a per-(block, date) claim that makes sends
+ * idempotent; once written it permanently suppresses that pair, so moving a
+ * block after its reminder has already fired would otherwise go unannounced.
+ *
+ * Only claims from yesterday onward are dropped, and dropping them cannot cause
+ * a spurious send: the dispatcher still gates every delivery on the
+ * occurrence's reminder window, and windows for past occurrences are closed.
+ * The one-day slack avoids having to resolve the user's timezone here.
+ *
+ * Pass `dates` to limit the release to specific occurrence dates.
+ */
+export async function releaseDeliveryClaims(
+  scheduleBlockId: string,
+  dates?: string[]
+): Promise<void> {
+  if (dates && dates.length === 0) return;
+  const floor = addDaysKey(toDateKey(new Date()), -1);
+  await db
+    .delete(reminderDeliveries)
+    .where(
+      and(
+        eq(reminderDeliveries.scheduleBlockId, scheduleBlockId),
+        gte(reminderDeliveries.occurrenceDate, floor),
+        dates ? inArray(reminderDeliveries.occurrenceDate, dates) : undefined
+      )
+    );
+}
 
 function mapException(e: typeof blockExceptions.$inferSelect): ExpandableException {
   return {

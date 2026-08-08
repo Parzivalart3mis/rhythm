@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { occurrenceEdit } from "@/lib/validations";
 import { unauthorized, notFound, parseBody, apiError, serverError } from "@/lib/api";
 import { queueReminderScheduleSync } from "@/lib/cron/trigger";
+import { releaseDeliveryClaims } from "@/lib/blocks-service";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,6 +57,14 @@ export async function PATCH(req: Request, { params }: Params) {
           newDate: values.newDate,
         },
       });
+
+    // The occurrence moved (or was skipped), so any delivery already claimed for
+    // the old or new date must be released — see releaseDeliveryClaims.
+    await releaseDeliveryClaims(
+      id,
+      [values.occurrenceDate, values.newDate].filter((d): d is string => !!d)
+    );
+
     queueReminderScheduleSync("occurrence.upsert");
     return NextResponse.json({ status: "applied" });
   } catch {
@@ -89,6 +98,7 @@ export async function DELETE(req: Request, { params }: Params) {
         eq(blockExceptions.occurrenceDate, date)
       )
     );
+  await releaseDeliveryClaims(id, [date]);
   queueReminderScheduleSync("occurrence.restore");
   return NextResponse.json({ ok: true });
 }

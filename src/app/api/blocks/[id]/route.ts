@@ -13,11 +13,11 @@ import {
   rateLimited,
 } from "@/lib/api";
 import { limitBlockWrite } from "@/lib/rate-limit";
-import { loadExpandInputs } from "@/lib/blocks-service";
+import { loadExpandInputs, releaseDeliveryClaims } from "@/lib/blocks-service";
 import { queueReminderScheduleSync } from "@/lib/cron/trigger";
 import { findConflictsForBlock } from "@/lib/recurrence/conflict-check";
 import type { ExpandInput } from "@/lib/recurrence/expand-occurrences";
-import { addDaysKey } from "@/lib/time";
+import { addDaysKey, normalizeTime } from "@/lib/time";
 import { CONFLICT_WINDOW_DAYS } from "@/lib/constants";
 
 type Params = { params: Promise<{ id: string }> };
@@ -100,24 +100,42 @@ export async function PATCH(req: Request, { params }: Params) {
     }
   }
 
+  const next = {
+    categoryId: data.categoryId,
+    title: data.title,
+    notes: data.notes ?? null,
+    blockType: data.blockType,
+    startTime: data.blockType === "fixed_time" ? data.startTime ?? null : null,
+    endTime: data.blockType === "fixed_time" ? data.endTime ?? null : null,
+    taskDate: data.isRecurring ? null : data.taskDate ?? null,
+    isRecurring: data.isRecurring,
+    rruleString: data.isRecurring ? data.rruleString ?? null : null,
+    seriesStartDate: data.isRecurring ? data.seriesStartDate ?? null : null,
+    reminderLeadMinutes: data.reminderLeadMinutes,
+  };
+
+  // Which occurrences exist, and when — stored times come back as "HH:MM:SS".
+  const shapeChanged =
+    normalizeTime(existing.startTime ?? "") !== (next.startTime ?? "") ||
+    normalizeTime(existing.endTime ?? "") !== (next.endTime ?? "") ||
+    existing.taskDate !== next.taskDate ||
+    existing.isRecurring !== next.isRecurring ||
+    existing.rruleString !== next.rruleString ||
+    existing.seriesStartDate !== next.seriesStartDate;
+
+  // When a reminder would fire. Editing only the title must not re-notify, so a
+  // delivery claim is released only if the timing genuinely moved.
+  const remindersMoved =
+    shapeChanged || existing.reminderLeadMinutes !== next.reminderLeadMinutes;
+
   try {
     await db
       .update(scheduleBlocks)
-      .set({
-        categoryId: data.categoryId,
-        title: data.title,
-        notes: data.notes ?? null,
-        blockType: data.blockType,
-        startTime: data.blockType === "fixed_time" ? data.startTime ?? null : null,
-        endTime: data.blockType === "fixed_time" ? data.endTime ?? null : null,
-        taskDate: data.isRecurring ? null : data.taskDate ?? null,
-        isRecurring: data.isRecurring,
-        rruleString: data.isRecurring ? data.rruleString ?? null : null,
-        seriesStartDate: data.isRecurring ? data.seriesStartDate ?? null : null,
-        reminderLeadMinutes: data.reminderLeadMinutes,
-        updatedAt: new Date(),
-      })
+      .set({ ...next, updatedAt: new Date() })
       .where(eq(scheduleBlocks.id, id));
+
+    if (remindersMoved) await releaseDeliveryClaims(id);
+
     queueReminderScheduleSync("block.update");
     return NextResponse.json({ status: "updated", blockId: id });
   } catch {
