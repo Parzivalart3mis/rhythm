@@ -1,0 +1,53 @@
+name: CI
+
+# Vercel builds on push, which runs next build (and therefore typecheck), but
+# never the linter or the test suite. With no code review either, a green
+# deploy was previously the only signal.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No version here: pnpm/action-setup reads packageManager from
+      # package.json, so CI, local and Vercel all agree.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      # Placeholders only. The build must not need real credentials, and a
+      # missing NEXT_PUBLIC_* var at build time changes what gets inlined.
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci-placeholder
+          CLERK_SECRET_KEY: sk_test_ci-placeholder
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ci-placeholder
+          NEXT_PUBLIC_APP_URL: https://example.invalid
