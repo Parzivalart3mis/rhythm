@@ -70,7 +70,7 @@ export function OccurrenceEditorSheet({ open, onOpenChange, occurrence }: Props)
     setBusy(true);
     try {
       await apiFetch(`/api/blocks/${occ.blockId}`, { method: "DELETE" });
-      toast("Series deleted.", "success");
+      toast(isRecurring ? "Series deleted." : "Block deleted.", "success");
       bumpRefresh();
       onOpenChange(false);
     } catch (e) {
@@ -92,8 +92,10 @@ export function OccurrenceEditorSheet({ open, onOpenChange, occurrence }: Props)
           <div className="space-y-2 pb-2">
             <ActionRow
               icon={Pencil}
-              label="Edit series"
-              hint="Change the whole recurring block"
+              label={isRecurring ? "Edit series" : "Edit block"}
+              hint={
+                isRecurring ? "Change the whole recurring block" : "Change this block"
+              }
               onClick={() => {
                 onOpenChange(false);
                 openEditor({ blockId: occ.blockId });
@@ -132,8 +134,12 @@ export function OccurrenceEditorSheet({ open, onOpenChange, occurrence }: Props)
             ) : null}
             <ActionRow
               icon={Trash2}
-              label="Delete series"
-              hint="Remove this block and all occurrences"
+              label={isRecurring ? "Delete series" : "Delete block"}
+              hint={
+                isRecurring
+                  ? "Remove this block and all occurrences"
+                  : "Remove this block"
+              }
               destructive
               onClick={() => setMode("confirmDelete")}
             />
@@ -208,8 +214,9 @@ export function OccurrenceEditorSheet({ open, onOpenChange, occurrence }: Props)
         {mode === "confirmDelete" ? (
           <div className="space-y-4 pb-4">
             <p className="text-sm text-muted-foreground">
-              Delete <span className="font-medium text-foreground">{occ.title}</span>{" "}
-              and all of its occurrences? This cannot be undone.
+              Delete <span className="font-medium text-foreground">{occ.title}</span>
+              {isRecurring ? " and all of its occurrences" : ""}? This cannot be
+              undone.
             </p>
             <div className="flex gap-2">
               <Button
