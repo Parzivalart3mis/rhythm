@@ -31,6 +31,7 @@ interface Props {
     prefillDate?: string;
     prefillStart?: string;
     prefillEnd?: string;
+    fromDate?: string;
   };
 }
 
@@ -77,6 +78,8 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
   const [conflicts, setConflicts] = React.useState<ConflictingBlock[]>([]);
   const [liveConflicts, setLiveConflicts] = React.useState<ConflictingBlock[]>([]);
   const isEditing = !!target.blockId;
+  // Editing forward from a date splits the series rather than rewriting it.
+  const splitFrom = target.blockId ? target.fromDate : undefined;
   // A duplicate seeds from an existing block but has no id, so saving creates.
   const sourceId = target.blockId ?? target.duplicateOf;
 
@@ -101,6 +104,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
             startTime: block.startTime?.slice(0, 5) ?? "09:00",
             endTime: block.endTime?.slice(0, 5) ?? "10:00",
             date:
+              splitFrom ??
               (block.isRecurring ? block.seriesStartDate : block.taskDate) ??
               toDateKey(new Date()),
             frequency: rec.frequency,
@@ -129,6 +133,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
   }, [
     open,
     sourceId,
+    splitFrom,
     target.duplicateOf,
     target.prefillDate,
     target.prefillStart,
@@ -267,10 +272,15 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
       seriesStartDate: isRecurring ? form.date : undefined,
       reminderLeadMinutes: form.reminderLeadMinutes,
       force,
+      ...(splitFrom ? { fromDate: splitFrom } : {}),
     };
 
     try {
-      const path = isEditing ? `/api/blocks/${target.blockId}` : "/api/blocks";
+      const path = splitFrom
+        ? `/api/blocks/${target.blockId}/future`
+        : isEditing
+          ? `/api/blocks/${target.blockId}`
+          : "/api/blocks";
       const method = isEditing ? "PATCH" : "POST";
       const res = await apiFetch<
         | {
@@ -313,7 +323,18 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     <Sheet open={open} onOpenChange={requestClose}>
       <SheetContent
         title={
-          isEditing ? "Edit block" : target.duplicateOf ? "Duplicate block" : "New block"
+          splitFrom
+            ? "Edit future occurrences"
+            : isEditing
+              ? "Edit block"
+              : target.duplicateOf
+                ? "Duplicate block"
+                : "New block"
+        }
+        description={
+          splitFrom
+            ? `Applies from ${splitFrom} onward. Earlier occurrences keep their current settings.`
+            : undefined
         }
       >
         {loading ? (

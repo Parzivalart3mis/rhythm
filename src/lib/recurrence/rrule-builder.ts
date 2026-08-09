@@ -99,6 +99,22 @@ export function parseRecurrenceState(rruleString: string | null): RecurrenceStat
   }
 }
 
+/**
+ * Return `rruleString` with its end date replaced by `untilDateKey`.
+ *
+ * Textual rather than parse-and-rebuild so it preserves rules this module
+ * can't model (monthly-by-ordinal, BYSETPOS): splitting a series must never
+ * silently rewrite the half being kept.
+ */
+export function withUntil(rruleString: string, untilDateKey: string): string {
+  const parts = rruleString
+    .split(";")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0 && !/^UNTIL=/i.test(p));
+  parts.push(`UNTIL=${untilStamp(untilDateKey)}`);
+  return parts.join(";");
+}
+
 /** Human summary for display, e.g. "Every Mon, Wed, Fri". */
 export function describeRecurrence(state: RecurrenceState): string {
   const suffix = state.until ? ` until ${state.until}` : "";

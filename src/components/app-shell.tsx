@@ -18,6 +18,11 @@ interface EditorTarget {
   /** HH:MM defaults, so tapping an empty slot doesn't land on 09:00. */
   prefillStart?: string;
   prefillEnd?: string;
+  /**
+   * Edit only this occurrence onward: the series is split here, leaving past
+   * occurrences as they were. Used with blockId.
+   */
+  fromDate?: string;
 }
 
 interface AppContextValue {

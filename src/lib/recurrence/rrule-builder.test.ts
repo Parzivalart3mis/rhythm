@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   buildRruleString,
-  parseRecurrenceState,
   describeRecurrence,
+  parseRecurrenceState,
+  withUntil,
 } from "./rrule-builder";
 
 describe("rrule-builder", () => {
@@ -171,6 +172,60 @@ describe("monthly and end dates", () => {
       "2026-01-08",
       "2026-01-09",
       "2026-01-10",
+    ]);
+  });
+});
+
+describe("withUntil", () => {
+  it("appends an end date to a rule that has none", () => {
+    expect(withUntil("FREQ=WEEKLY;BYDAY=MO,WE", "2026-03-10")).toBe(
+      "FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20260310T235959Z"
+    );
+  });
+
+  it("replaces an existing end date rather than adding a second", () => {
+    const out = withUntil(
+      "FREQ=DAILY;UNTIL=20261231T235959Z",
+      "2026-03-10"
+    );
+    expect(out).toBe("FREQ=DAILY;UNTIL=20260310T235959Z");
+    expect(out.match(/UNTIL=/g)).toHaveLength(1);
+  });
+
+  it("preserves rule parts this module can't model", () => {
+    // Splitting a monthly-by-ordinal series must keep the kept half intact.
+    expect(withUntil("FREQ=MONTHLY;BYDAY=1MO;BYSETPOS=1", "2026-03-10")).toBe(
+      "FREQ=MONTHLY;BYDAY=1MO;BYSETPOS=1;UNTIL=20260310T235959Z"
+    );
+  });
+
+  it("produces a rule that still parses and stops on the right day", async () => {
+    const { expandBlock } = await import("./expand-occurrences");
+    const occ = expandBlock(
+      {
+        block: {
+          id: "b1",
+          categoryId: "c1",
+          title: "Truncated",
+          notes: null,
+          blockType: "fixed_time",
+          startTime: "09:00",
+          endTime: "10:00",
+          taskDate: null,
+          isRecurring: true,
+          rruleString: withUntil("FREQ=DAILY", "2026-01-07"),
+          seriesStartDate: "2026-01-05",
+          reminderLeadMinutes: 10,
+        },
+        exceptions: [],
+      },
+      "2026-01-05",
+      "2026-01-20"
+    );
+    expect(occ.map((o) => o.date)).toEqual([
+      "2026-01-05",
+      "2026-01-06",
+      "2026-01-07",
     ]);
   });
 });

@@ -5,6 +5,7 @@ import {
   Pencil,
   CalendarX,
   CalendarClock,
+  CalendarRange,
   Copy,
   Trash2,
   Loader2,
@@ -112,6 +113,15 @@ export function OccurrenceEditorSheet({ open, onOpenChange, occurrence }: Props)
             />
             {isRecurring ? (
               <>
+                <ActionRow
+                  icon={CalendarRange}
+                  label="Edit this and future"
+                  hint="Leave earlier occurrences as they are"
+                  onClick={() => {
+                    onOpenChange(false);
+                    openEditor({ blockId: occ.blockId, fromDate: occ.date });
+                  }}
+                />
                 <ActionRow
                   icon={CalendarClock}
                   label="Move just this one"

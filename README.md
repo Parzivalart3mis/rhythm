@@ -117,6 +117,8 @@ All routes require a Clerk session (except the svix-signed webhook and the
 - `GET/POST /api/categories`, `PATCH/DELETE /api/categories/:id`
 - `GET/POST /api/blocks`, `GET/PATCH/DELETE /api/blocks/:id`
 - `PATCH/DELETE /api/blocks/:id/occurrence` — single-occurrence skip/reschedule
+- `PATCH /api/blocks/:id/future` — split a series: cap the original with `UNTIL`
+  and start a new block from that date
 - `POST /api/blocks/check-conflicts` — live pre-flight
 - `POST /api/push/subscribe`, `DELETE /api/push/unsubscribe`
 - `POST|GET /api/cron/send-reminders` — dispatch, then reconcile the remote schedule
