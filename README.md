@@ -98,6 +98,10 @@ weekly schedule for that user.
 
 1. Create a Neon database and run `pnpm db:migrate`.
 2. Add all env vars in the Vercel project settings.
+   `package.json` pins `packageManager` to pnpm 10 — the newest major Vercel
+   supports. Vercel only honours that pin when `ENABLE_EXPERIMENTAL_COREPACK=1`
+   is set; without it, it infers pnpm 9 or 10 from `lockfileVersion: 9.0`, which
+   also works. The pin is what CI and local installs follow.
 3. Add a Clerk webhook pointing at `/api/webhooks/clerk` (events: `user.*`).
 4. Set up the scheduler — see [Reminder scheduling](#reminder-scheduling). There is no
    `crons` block in `vercel.json`; Hobby-tier Vercel cron only runs daily, which is useless
