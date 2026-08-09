@@ -45,6 +45,9 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
   const { categories, bumpRefresh } = useApp();
   const { toast } = useToast();
   const [form, setForm] = React.useState(empty);
+  // Snapshot of the form as it was seeded, to detect unsaved edits on dismissal.
+  const [initialForm, setInitialForm] = React.useState(empty);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [conflicts, setConflicts] = React.useState<ConflictingBlock[]>([]);
@@ -56,13 +59,14 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     if (!open) return;
     setConflicts([]);
     setLiveConflicts([]);
+    setConfirmDiscard(false);
     const firstCat = categories[0]?.id ?? "";
     if (target.blockId) {
       setLoading(true);
       apiFetch<{ block: RawBlock }>(`/api/blocks/${target.blockId}`)
         .then(({ block }) => {
           const rec = parseRecurrenceState(block.rruleString);
-          setForm({
+          const seeded = {
             title: block.title,
             notes: block.notes ?? "",
             categoryId: block.categoryId,
@@ -75,20 +79,40 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
             frequency: rec.frequency,
             weekdays: rec.weekdays,
             reminderLeadMinutes: block.reminderLeadMinutes,
-          });
+          };
+          setForm(seeded);
+          setInitialForm(seeded);
         })
         .catch(() => toast("Could not load this block.", "error"))
         .finally(() => setLoading(false));
     } else {
-      setForm({
+      const seeded = {
         ...empty,
         categoryId: firstCat,
         date: target.prefillDate ?? toDateKey(new Date()),
-      });
+      };
+      setForm(seeded);
+      setInitialForm(seeded);
     }
   }, [open, target.blockId, target.prefillDate, categories, toast]);
 
   const isRecurring = form.frequency !== "none";
+
+  // Weekday toggles reorder the array without changing the selection, so
+  // compare a normalised copy or a toggle-off-then-on reads as an edit.
+  const dirty =
+    JSON.stringify({ ...form, weekdays: [...form.weekdays].sort() }) !==
+    JSON.stringify({ ...initialForm, weekdays: [...initialForm.weekdays].sort() });
+
+  // Every dismissal path — the X, Escape, tapping the overlay, a swipe — funnels
+  // through onOpenChange, so guarding here covers all of them at once.
+  function requestClose(next: boolean) {
+    if (!next && dirty && !saving) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onOpenChange(next);
+  }
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -220,7 +244,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={requestClose}>
       <SheetContent title={isEditing ? "Edit block" : "New block"}>
         {loading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -434,8 +458,40 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
               />
             ) : null}
 
+            {confirmDiscard ? (
+              <div
+                className="flex gap-2.5 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+                role="alert"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                <p className="font-medium">
+                  Discard your changes to this block?
+                </p>
+              </div>
+            ) : null}
+
             <div className="flex gap-2 pt-1">
-              {conflicts.length > 0 ? (
+              {confirmDiscard ? (
+                <>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setConfirmDiscard(false)}
+                  >
+                    Keep editing
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => {
+                      setConfirmDiscard(false);
+                      onOpenChange(false);
+                    }}
+                  >
+                    Discard
+                  </Button>
+                </>
+              ) : conflicts.length > 0 ? (
                 <>
                   <Button
                     variant="outline"
