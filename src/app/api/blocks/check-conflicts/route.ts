@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { checkConflictsInput } from "@/lib/validations";
-import { unauthorized, parseBody, apiError } from "@/lib/api";
+import { unauthorized, parseBody, apiError, rateLimited } from "@/lib/api";
+import { limitConflictCheck } from "@/lib/rate-limit";
 import { loadExpandInputs } from "@/lib/blocks-service";
 import { expandOccurrences } from "@/lib/recurrence/expand-occurrences";
 import { findConflictsForInterval } from "@/lib/recurrence/conflict-check";
@@ -10,6 +11,9 @@ import { findConflictsForInterval } from "@/lib/recurrence/conflict-check";
 export async function POST(req: Request) {
   const userId = await requireUser();
   if (!userId) return unauthorized();
+
+  const { success } = await limitConflictCheck(userId);
+  if (!success) return rateLimited();
 
   const parsed = await parseBody(req, checkConflictsInput);
   if ("error" in parsed) return parsed.error;

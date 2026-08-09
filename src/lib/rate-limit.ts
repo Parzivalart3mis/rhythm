@@ -19,6 +19,14 @@ const blockWriteLimiter = makeLimiter(
   "rl:block-write"
 );
 
+// The editor debounces to ~1 call per 350ms of typing and each one re-expands
+// the whole timetable server-side. Generous enough that normal editing never
+// trips it; bounded so an untrusted account can't spin it.
+const conflictCheckLimiter = makeLimiter(
+  Ratelimit.slidingWindow(120, "1 m"),
+  "rl:check-conflicts"
+);
+
 // 10 push-subscribe calls / day / user.
 const pushSubscribeLimiter = makeLimiter(
   Ratelimit.slidingWindow(10, "1 d"),
@@ -42,4 +50,8 @@ export function limitBlockWrite(userId: string) {
 
 export function limitPushSubscribe(userId: string) {
   return check(pushSubscribeLimiter, userId);
+}
+
+export function limitConflictCheck(userId: string) {
+  return check(conflictCheckLimiter, userId);
 }
