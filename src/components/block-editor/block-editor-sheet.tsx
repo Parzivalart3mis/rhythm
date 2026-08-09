@@ -28,6 +28,12 @@ interface Props {
   target: { blockId?: string; prefillDate?: string };
 }
 
+type FieldName = "title" | "categoryId" | "endTime" | "weekdays";
+type FieldErrors = Partial<Record<FieldName, string | undefined>>;
+
+/** Focus order when jumping to the first invalid control; matches input ids. */
+const FIELD_ORDER: FieldName[] = ["title", "categoryId", "endTime", "weekdays"];
+
 const empty = {
   title: "",
   notes: "",
@@ -48,6 +54,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
   // Snapshot of the form as it was seeded, to detect unsaved edits on dismissal.
   const [initialForm, setInitialForm] = React.useState(empty);
   const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  const [errors, setErrors] = React.useState<FieldErrors>({});
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [conflicts, setConflicts] = React.useState<ConflictingBlock[]>([]);
@@ -60,6 +67,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     setConflicts([]);
     setLiveConflicts([]);
     setConfirmDiscard(false);
+    setErrors({});
     const firstCat = categories[0]?.id ?? "";
     if (target.blockId) {
       setLoading(true);
@@ -114,9 +122,16 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     onOpenChange(next);
   }
 
+  function clearError(field: FieldName) {
+    setErrors((e) => (field in e ? { ...e, [field]: undefined } : e));
+  }
+
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
     setConflicts([]);
+    // The end-time error depends on both times, so editing either clears it.
+    if (key === "startTime" || key === "endTime") clearError("endTime");
+    else if (key === "title" || key === "categoryId") clearError(key);
   }
 
   function toggleWeekday(i: number) {
@@ -127,6 +142,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
         : [...f.weekdays, i],
     }));
     setConflicts([]);
+    clearError("weekdays");
   }
 
   // Live conflict preview on the anchor date for timed blocks.
@@ -165,22 +181,29 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     target.blockId,
   ]);
 
-  function validate(): string | null {
-    if (!form.title.trim()) return "Add a title.";
-    if (!form.categoryId) return "Pick a category.";
-    if (form.blockType === "fixed_time") {
-      if (form.startTime >= form.endTime) return "End time must be after start time.";
+  // Every problem at once, keyed by field, so the message sits next to the
+  // control that caused it instead of vanishing in a toast.
+  function validate(): FieldErrors {
+    const next: FieldErrors = {};
+    if (!form.title.trim()) next.title = "Give this block a title.";
+    if (!form.categoryId) next.categoryId = "Pick a category.";
+    if (form.blockType === "fixed_time" && form.startTime >= form.endTime) {
+      next.endTime = "End time must be after the start time.";
     }
     if (isRecurring && form.frequency === "weekly" && form.weekdays.length === 0) {
-      return "Pick at least one weekday.";
+      next.weekdays = "Pick at least one weekday.";
     }
-    return null;
+    return next;
   }
 
   async function submit(force: boolean) {
-    const problem = validate();
-    if (problem) {
-      toast(problem, "error");
+    const problems = validate();
+    setErrors(problems);
+    if (Object.keys(problems).length > 0) {
+      // Move focus to the first offending control so the error is unmissable
+      // with the on-screen keyboard covering half the sheet.
+      const first = FIELD_ORDER.find((f) => problems[f]);
+      if (first) document.getElementById(first)?.focus();
       return;
     }
     setSaving(true);
@@ -251,7 +274,14 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
             <Loader2 className="size-5 animate-spin" />
           </div>
         ) : (
-          <div className="space-y-5 pb-4">
+          <form
+            className="space-y-5 pb-4"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!saving && !confirmDiscard && conflicts.length === 0) submit(false);
+            }}
+          >
             <div className="space-y-1.5">
               <Label htmlFor="title">Title</Label>
               <Input
@@ -260,13 +290,23 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                 onChange={(e) => set("title", e.target.value)}
                 placeholder="Push Day, Team standup…"
                 maxLength={100}
+                aria-invalid={!!errors.title}
+                aria-describedby={errors.title ? "title-error" : undefined}
               />
+              <FieldError id="title-error" message={errors.title} />
             </div>
 
             {/* Category swatches */}
             <div className="space-y-1.5">
-              <Label>Category</Label>
-              <div className="flex flex-wrap gap-2">
+              <Label id="categoryId-label">Category</Label>
+              <div
+                id="categoryId"
+                tabIndex={-1}
+                role="group"
+                aria-labelledby="categoryId-label"
+                aria-describedby={errors.categoryId ? "categoryId-error" : undefined}
+                className="flex flex-wrap gap-2"
+              >
                 {categories.map((c) => {
                   const active = c.id === form.categoryId;
                   return (
@@ -296,6 +336,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                   </p>
                 ) : null}
               </div>
+              <FieldError id="categoryId-error" message={errors.categoryId} />
             </div>
 
             {/* Type toggle */}
@@ -327,13 +368,18 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="end">End</Label>
+                  <Label htmlFor="endTime">End</Label>
                   <Input
-                    id="end"
+                    id="endTime"
                     type="time"
                     value={form.endTime}
                     onChange={(e) => set("endTime", e.target.value)}
+                    aria-invalid={!!errors.endTime}
+                    aria-describedby={errors.endTime ? "endTime-error" : undefined}
                   />
+                </div>
+                <div className="col-span-2">
+                  <FieldError id="endTime-error" message={errors.endTime} />
                 </div>
               </div>
             ) : null}
@@ -367,7 +413,16 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                   </div>
 
                   {form.frequency === "weekly" ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div
+                      id="weekdays"
+                      tabIndex={-1}
+                      role="group"
+                      aria-label="Repeat on"
+                      aria-describedby={
+                        errors.weekdays ? "weekdays-error" : undefined
+                      }
+                      className="flex flex-wrap gap-1.5"
+                    >
                       {WEEKDAYS.map((d, i) => {
                         const active = form.weekdays.includes(i);
                         return (
@@ -388,6 +443,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                       })}
                     </div>
                   ) : null}
+                  <FieldError id="weekdays-error" message={errors.weekdays} />
                 </div>
               ) : null}
             </div>
@@ -474,6 +530,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
               {confirmDiscard ? (
                 <>
                   <Button
+                    type="button"
                     variant="outline"
                     className="flex-1"
                     onClick={() => setConfirmDiscard(false)}
@@ -481,6 +538,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                     Keep editing
                   </Button>
                   <Button
+                    type="button"
                     variant="destructive"
                     className="flex-1"
                     onClick={() => {
@@ -494,6 +552,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
               ) : conflicts.length > 0 ? (
                 <>
                   <Button
+                    type="button"
                     variant="outline"
                     className="flex-1"
                     onClick={() => setConflicts([])}
@@ -502,6 +561,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                     Go back
                   </Button>
                   <Button
+                    type="button"
                     variant="destructive"
                     className="flex-1"
                     onClick={() => submit(true)}
@@ -512,8 +572,8 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                 </>
               ) : (
                 <Button
+                  type="submit"
                   className="flex-1"
-                  onClick={() => submit(false)}
                   disabled={saving || categories.length === 0}
                 >
                   {saving ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -521,10 +581,19 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                 </Button>
               )}
             </div>
-          </div>
+          </form>
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-xs font-medium text-error">
+      {message}
+    </p>
   );
 }
 
