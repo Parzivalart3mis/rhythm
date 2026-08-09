@@ -15,6 +15,9 @@ interface EditorTarget {
   /** Seed the form from this block but save as a new one. */
   duplicateOf?: string;
   prefillDate?: string; // YYYY-MM-DD default date for a new block
+  /** HH:MM defaults, so tapping an empty slot doesn't land on 09:00. */
+  prefillStart?: string;
+  prefillEnd?: string;
 }
 
 interface AppContextValue {

@@ -24,6 +24,9 @@ import { cn } from "@/lib/utils";
 const PX_PER_MIN = 0.9;
 const DEFAULT_START_HOUR = 7;
 const DEFAULT_END_HOUR = 22;
+/** New blocks snap to this grid, and default to one slot long. */
+const SLOT_MINUTES = 15;
+const DEFAULT_DURATION_MINUTES = 60;
 
 interface Placed {
   occ: OccurrenceView;
@@ -81,7 +84,7 @@ function placeDay(dayBlocks: OccurrenceView[], gridStartMin: number): Placed[] {
 }
 
 export default function WeekPage() {
-  const { openOccurrenceEditor, bumpRefresh, timezone } = useApp();
+  const { openOccurrenceEditor, openEditor, bumpRefresh, timezone } = useApp();
   const [anchor, setAnchor] = React.useState(() => toDateKey(new Date()));
   const { occurrences, loading, error } = useSchedule("week", anchor);
   const { dateKey: todayKey, minutes: nowMin } = zonedNow(useNow(), timezone);
@@ -215,19 +218,45 @@ export default function WeekPage() {
                   const isToday = d === todayKey;
                   const showNow =
                     isToday && nowMin >= gridStartMin && nowMin <= gridEndMin;
+                  // Tapping empty space creates a block at that time rather
+                  // than the fixed 09:00 default — the inverse of the placement
+                  // maths above.
+                  const createAt = (e: React.MouseEvent<HTMLDivElement>) => {
+                    if (e.target !== e.currentTarget) return; // a block was hit
+                    const y = e.nativeEvent.offsetY;
+                    const raw = gridStartMin + y / PX_PER_MIN;
+                    const snapped = Math.max(
+                      gridStartMin,
+                      Math.min(
+                        gridEndMin - SLOT_MINUTES,
+                        Math.round(raw / SLOT_MINUTES) * SLOT_MINUTES
+                      )
+                    );
+                    openEditor({
+                      prefillDate: d,
+                      prefillStart: minutesToTime(snapped),
+                      prefillEnd: minutesToTime(
+                        Math.min(1439, snapped + DEFAULT_DURATION_MINUTES)
+                      ),
+                    });
+                  };
                   return (
-                    <div key={d} className="relative border-l border-border">
+                    <div
+                      key={d}
+                      className="relative border-l border-border"
+                      onClick={createAt}
+                    >
                       {/* hour lines */}
                       {hours.map((h) => (
                         <div
                           key={h}
-                          className="absolute inset-x-0 border-t border-border/60"
+                          className="pointer-events-none absolute inset-x-0 border-t border-border/60"
                           style={{ top: (h * 60 - gridStartMin) * PX_PER_MIN }}
                         />
                       ))}
                       {showNow ? (
                         <div
-                          className="absolute inset-x-0 z-10 border-t-2 border-error"
+                          className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-error"
                           style={{ top: (nowMin - gridStartMin) * PX_PER_MIN }}
                         />
                       ) : null}

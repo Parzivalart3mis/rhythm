@@ -25,7 +25,13 @@ import { formatTime12 } from "@/lib/time";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  target: { blockId?: string; duplicateOf?: string; prefillDate?: string };
+  target: {
+    blockId?: string;
+    duplicateOf?: string;
+    prefillDate?: string;
+    prefillStart?: string;
+    prefillEnd?: string;
+  };
 }
 
 type FieldName = "title" | "categoryId" | "endTime" | "weekdays";
@@ -100,11 +106,22 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
         ...empty,
         categoryId: firstCat,
         date: target.prefillDate ?? toDateKey(new Date()),
+        startTime: target.prefillStart ?? empty.startTime,
+        endTime: target.prefillEnd ?? empty.endTime,
       };
       setForm(seeded);
       setInitialForm(seeded);
     }
-  }, [open, sourceId, target.duplicateOf, target.prefillDate, categories, toast]);
+  }, [
+    open,
+    sourceId,
+    target.duplicateOf,
+    target.prefillDate,
+    target.prefillStart,
+    target.prefillEnd,
+    categories,
+    toast,
+  ]);
 
   const isRecurring = form.frequency !== "none";
 
