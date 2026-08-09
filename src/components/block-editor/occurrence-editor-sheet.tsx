@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, CalendarX, CalendarClock, Trash2, Loader2 } from "lucide-react";
+import {
+  Pencil,
+  CalendarX,
+  CalendarClock,
+  Copy,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +97,15 @@ export function OccurrenceEditorSheet({ open, onOpenChange, occurrence }: Props)
               onClick={() => {
                 onOpenChange(false);
                 openEditor({ blockId: occ.blockId });
+              }}
+            />
+            <ActionRow
+              icon={Copy}
+              label="Duplicate"
+              hint="Start a new block from this one"
+              onClick={() => {
+                onOpenChange(false);
+                openEditor({ duplicateOf: occ.blockId });
               }}
             />
             {isRecurring ? (

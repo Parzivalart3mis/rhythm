@@ -25,7 +25,7 @@ import { formatTime12 } from "@/lib/time";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  target: { blockId?: string; prefillDate?: string };
+  target: { blockId?: string; duplicateOf?: string; prefillDate?: string };
 }
 
 type FieldName = "title" | "categoryId" | "endTime" | "weekdays";
@@ -60,6 +60,8 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
   const [conflicts, setConflicts] = React.useState<ConflictingBlock[]>([]);
   const [liveConflicts, setLiveConflicts] = React.useState<ConflictingBlock[]>([]);
   const isEditing = !!target.blockId;
+  // A duplicate seeds from an existing block but has no id, so saving creates.
+  const sourceId = target.blockId ?? target.duplicateOf;
 
   // Initialize form when the sheet opens.
   React.useEffect(() => {
@@ -69,13 +71,13 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     setConfirmDiscard(false);
     setErrors({});
     const firstCat = categories[0]?.id ?? "";
-    if (target.blockId) {
+    if (sourceId) {
       setLoading(true);
-      apiFetch<{ block: RawBlock }>(`/api/blocks/${target.blockId}`)
+      apiFetch<{ block: RawBlock }>(`/api/blocks/${sourceId}`)
         .then(({ block }) => {
           const rec = parseRecurrenceState(block.rruleString);
           const seeded = {
-            title: block.title,
+            title: target.duplicateOf ? `${block.title} (copy)` : block.title,
             notes: block.notes ?? "",
             categoryId: block.categoryId,
             blockType: block.blockType,
@@ -102,7 +104,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
       setForm(seeded);
       setInitialForm(seeded);
     }
-  }, [open, target.blockId, target.prefillDate, categories, toast]);
+  }, [open, sourceId, target.duplicateOf, target.prefillDate, categories, toast]);
 
   const isRecurring = form.frequency !== "none";
 
@@ -268,7 +270,11 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={requestClose}>
-      <SheetContent title={isEditing ? "Edit block" : "New block"}>
+      <SheetContent
+        title={
+          isEditing ? "Edit block" : target.duplicateOf ? "Duplicate block" : "New block"
+        }
+      >
         {loading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />

@@ -12,6 +12,8 @@ import type { Category, OccurrenceView } from "@/types";
 
 interface EditorTarget {
   blockId?: string; // present when editing an existing series
+  /** Seed the form from this block but save as a new one. */
+  duplicateOf?: string;
   prefillDate?: string; // YYYY-MM-DD default date for a new block
 }
 
