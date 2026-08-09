@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { Bell, Undo2, Loader2 } from "lucide-react";
 import { useApp } from "@/components/app-shell";
@@ -22,12 +23,37 @@ import { useNow } from "@/hooks/useNow";
 import type { OccurrenceView } from "@/types";
 import { cn } from "@/lib/utils";
 
+// useSearchParams opts the subtree out of prerendering, so it needs its own
+// Suspense boundary — otherwise the whole /day route fails to build statically.
 export default function DayPage() {
+  return (
+    <React.Suspense fallback={<AgendaSkeleton />}>
+      <DayView />
+    </React.Suspense>
+  );
+}
+
+function DayView() {
   const { openOccurrenceEditor, bumpRefresh, timezone } = useApp();
   const { toast } = useToast();
   // Ticks, so the Now line tracks the clock instead of freezing at page load.
   const { dateKey: todayKey, minutes: nowMinutes } = zonedNow(useNow(), timezone);
-  const [dateKey, setDateKey] = React.useState(() => toDateKey(new Date()));
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // The viewed date lives in the URL, so month -> day deep links resolve in one
+  // fetch and browser back/forward moves between dates.
+  const param = searchParams.get("date");
+  const dateKey =
+    param && /^\d{4}-\d{2}-\d{2}$/.test(param) ? param : toDateKey(new Date());
+
+  const setDateKey = React.useCallback(
+    (next: string | ((current: string) => string)) => {
+      const value = typeof next === "function" ? next(dateKey) : next;
+      router.replace(`/day?date=${value}`, { scroll: false });
+    },
+    [dateKey, router]
+  );
   const { occurrences, skipped, loading, error } = useSchedule("day", dateKey);
   const [restoring, setRestoring] = React.useState<string | null>(null);
 
@@ -52,12 +78,6 @@ export default function DayPage() {
       setRestoring(null);
     }
   }
-
-  // Support deep-linking from the month view: /day?date=YYYY-MM-DD.
-  React.useEffect(() => {
-    const param = new URLSearchParams(window.location.search).get("date");
-    if (param && /^\d{4}-\d{2}-\d{2}$/.test(param)) setDateKey(param);
-  }, []);
 
   const isToday = dateKey === todayKey;
   const tasks = occurrences.filter((o) => o.startTime === null);
