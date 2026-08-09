@@ -34,11 +34,17 @@ interface Props {
   };
 }
 
-type FieldName = "title" | "categoryId" | "endTime" | "weekdays";
+type FieldName = "title" | "categoryId" | "endTime" | "weekdays" | "until";
 type FieldErrors = Partial<Record<FieldName, string | undefined>>;
 
 /** Focus order when jumping to the first invalid control; matches input ids. */
-const FIELD_ORDER: FieldName[] = ["title", "categoryId", "endTime", "weekdays"];
+const FIELD_ORDER: FieldName[] = [
+  "title",
+  "categoryId",
+  "endTime",
+  "weekdays",
+  "until",
+];
 
 const empty = {
   title: "",
@@ -50,6 +56,8 @@ const empty = {
   date: toDateKey(new Date()),
   frequency: "none" as Frequency,
   weekdays: [] as number[],
+  monthDay: 1,
+  until: "", // empty means the series never ends
   // Verbatim rule for a recurrence this editor can't represent, sent back on
   // save so opening a block never rewrites it.
   originalRrule: null as string | null,
@@ -97,6 +105,8 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
               toDateKey(new Date()),
             frequency: rec.frequency,
             weekdays: rec.weekdays,
+            monthDay: rec.monthDay ?? 1,
+            until: rec.until ?? "",
             originalRrule: block.rruleString,
             reminderLeadMinutes: block.reminderLeadMinutes,
           };
@@ -154,6 +164,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     setConflicts([]);
     // The end-time error depends on both times, so editing either clears it.
     if (key === "startTime" || key === "endTime") clearError("endTime");
+    else if (key === "until" || key === "date") clearError("until");
     else if (key === "title" || key === "categoryId") clearError(key);
   }
 
@@ -216,6 +227,9 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
     if (isRecurring && form.frequency === "weekly" && form.weekdays.length === 0) {
       next.weekdays = "Pick at least one weekday.";
     }
+    if (isRecurring && form.until && form.until < form.date) {
+      next.until = "The end date can't be before the start date.";
+    }
     return next;
   }
 
@@ -237,6 +251,8 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
         : buildRruleString({
             frequency: form.frequency,
             weekdays: form.weekdays,
+            monthDay: form.monthDay,
+            until: form.until || null,
           });
     const payload = {
       categoryId: form.categoryId,
@@ -438,7 +454,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
 
               {isRecurring && form.frequency !== "unsupported" ? (
                 <div className="space-y-3 pt-1">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <FreqButton
                       active={form.frequency === "weekly"}
                       onClick={() => set("frequency", "weekly")}
@@ -449,7 +465,43 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                       onClick={() => set("frequency", "daily")}
                       label="Daily"
                     />
+                    <FreqButton
+                      active={form.frequency === "monthly"}
+                      onClick={() => {
+                        // Default to the anchor date's day of month.
+                        setForm((f) => ({
+                          ...f,
+                          frequency: "monthly",
+                          monthDay: Number(f.date.slice(8, 10)) || 1,
+                        }));
+                        setConflicts([]);
+                      }}
+                      label="Monthly"
+                    />
                   </div>
+
+                  {form.frequency === "monthly" ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="monthDay">Day of the month</Label>
+                      <Input
+                        id="monthDay"
+                        type="number"
+                        min={1}
+                        max={31}
+                        inputMode="numeric"
+                        value={form.monthDay}
+                        onChange={(e) =>
+                          set(
+                            "monthDay",
+                            Math.min(31, Math.max(1, Number(e.target.value) || 1))
+                          )
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Months without this day are skipped.
+                      </p>
+                    </div>
+                  ) : null}
 
                   {form.frequency === "weekly" ? (
                     <div
@@ -483,6 +535,23 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                     </div>
                   ) : null}
                   <FieldError id="weekdays-error" message={errors.weekdays} />
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="until">Ends on</Label>
+                    <Input
+                      id="until"
+                      type="date"
+                      value={form.until}
+                      min={form.date}
+                      onChange={(e) => set("until", e.target.value)}
+                      aria-invalid={!!errors.until}
+                      aria-describedby={errors.until ? "until-error" : undefined}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to repeat indefinitely.
+                    </p>
+                    <FieldError id="until-error" message={errors.until} />
+                  </div>
                 </div>
               ) : null}
             </div>

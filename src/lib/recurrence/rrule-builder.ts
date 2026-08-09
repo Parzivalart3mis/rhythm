@@ -6,34 +6,77 @@ import { RRULE_WEEKDAY_CODES, WEEKDAYS } from "@/lib/constants";
  * editor can represent. It must round-trip untouched: silently parsing it as
  * "none" and saving would convert a live series into a single one-off block.
  */
-export type Frequency = "none" | "daily" | "weekly" | "unsupported";
+export type Frequency =
+  | "none"
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "unsupported";
 
 // UI recurrence state -> RFC 5545 RRULE string (and back), kept intentionally
 // small: the MVP supports daily and weekly-by-weekday rules only.
 export interface RecurrenceState {
   frequency: Frequency;
   weekdays: number[]; // indices into WEEKDAYS (0=Mon)
+  /** Day of month for monthly rules, 1-31. */
+  monthDay?: number;
+  /** Inclusive last date, "YYYY-MM-DD". Absent means the series never ends. */
+  until?: string | null;
+}
+
+/** RRULE UNTIL is a UTC timestamp; we store an inclusive local date. */
+function untilStamp(dateKey: string): string {
+  return `${dateKey.replace(/-/g, "")}T235959Z`;
+}
+
+function untilDateKey(until: Date): string {
+  const y = until.getUTCFullYear();
+  const m = String(until.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(until.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export function buildRruleString(state: RecurrenceState): string | null {
   if (state.frequency === "none") return null;
   // Callers must send back the original string for a rule we can't build.
   if (state.frequency === "unsupported") return null;
-  if (state.frequency === "daily") return "FREQ=DAILY";
-  // weekly
-  const codes = state.weekdays
-    .slice()
-    .sort((a, b) => a - b)
-    .map((i) => RRULE_WEEKDAY_CODES[i]);
-  if (codes.length === 0) return "FREQ=WEEKLY";
-  return `FREQ=WEEKLY;BYDAY=${codes.join(",")}`;
+
+  const parts: string[] = [];
+  if (state.frequency === "daily") {
+    parts.push("FREQ=DAILY");
+  } else if (state.frequency === "monthly") {
+    parts.push("FREQ=MONTHLY");
+    if (state.monthDay) parts.push(`BYMONTHDAY=${state.monthDay}`);
+  } else {
+    parts.push("FREQ=WEEKLY");
+    const codes = state.weekdays
+      .slice()
+      .sort((a, b) => a - b)
+      .map((i) => RRULE_WEEKDAY_CODES[i]);
+    if (codes.length > 0) parts.push(`BYDAY=${codes.join(",")}`);
+  }
+  if (state.until) parts.push(`UNTIL=${untilStamp(state.until)}`);
+  return parts.join(";");
 }
 
 export function parseRecurrenceState(rruleString: string | null): RecurrenceState {
   if (!rruleString) return { frequency: "none", weekdays: [] };
   try {
     const opts = RRule.parseString(rruleString);
-    if (opts.freq === RRule.DAILY) return { frequency: "daily", weekdays: [] };
+    const until = opts.until ? untilDateKey(opts.until) : null;
+    if (opts.freq === RRule.DAILY) {
+      return { frequency: "daily", weekdays: [], until };
+    }
+    if (opts.freq === RRule.MONTHLY) {
+      const bmd = opts.bymonthday;
+      const monthDay = Array.isArray(bmd) ? bmd[0] : bmd;
+      // Only plain "day N of the month" rules round-trip; anything richer
+      // (BYSETPOS, BYDAY ordinals) stays unsupported.
+      if (typeof monthDay === "number" && monthDay >= 1 && monthDay <= 31) {
+        return { frequency: "monthly", weekdays: [], monthDay, until };
+      }
+      return { frequency: "unsupported", weekdays: [] };
+    }
     if (opts.freq === RRule.WEEKLY) {
       const byweekday = opts.byweekday;
       const weekdays: number[] = [];
@@ -45,7 +88,7 @@ export function parseRecurrenceState(rruleString: string | null): RecurrenceStat
           if (idx >= 0 && idx < WEEKDAYS.length) weekdays.push(idx);
         }
       }
-      return { frequency: "weekly", weekdays };
+      return { frequency: "weekly", weekdays, until };
     }
     // Parsed cleanly but isn't daily/weekly — e.g. monthly or yearly.
     return { frequency: "unsupported", weekdays: [] };
@@ -58,14 +101,18 @@ export function parseRecurrenceState(rruleString: string | null): RecurrenceStat
 
 /** Human summary for display, e.g. "Every Mon, Wed, Fri". */
 export function describeRecurrence(state: RecurrenceState): string {
+  const suffix = state.until ? ` until ${state.until}` : "";
   if (state.frequency === "none") return "Does not repeat";
   if (state.frequency === "unsupported") return "Custom repeat";
-  if (state.frequency === "daily") return "Every day";
-  if (state.weekdays.length === 0) return "Weekly";
-  if (state.weekdays.length === 7) return "Every day";
+  if (state.frequency === "daily") return `Every day${suffix}`;
+  if (state.frequency === "monthly") {
+    return `Monthly on day ${state.monthDay ?? 1}${suffix}`;
+  }
+  if (state.weekdays.length === 0) return `Weekly${suffix}`;
+  if (state.weekdays.length === 7) return `Every day${suffix}`;
   const labels = state.weekdays
     .slice()
     .sort((a, b) => a - b)
     .map((i) => WEEKDAYS[i]);
-  return `Every ${labels.join(", ")}`;
+  return `Every ${labels.join(", ")}${suffix}`;
 }
