@@ -1,7 +1,12 @@
 import { RRule } from "rrule";
 import { RRULE_WEEKDAY_CODES, WEEKDAYS } from "@/lib/constants";
 
-export type Frequency = "none" | "daily" | "weekly";
+/**
+ * `unsupported` means the stored rule is valid RFC 5545 but outside what this
+ * editor can represent. It must round-trip untouched: silently parsing it as
+ * "none" and saving would convert a live series into a single one-off block.
+ */
+export type Frequency = "none" | "daily" | "weekly" | "unsupported";
 
 // UI recurrence state -> RFC 5545 RRULE string (and back), kept intentionally
 // small: the MVP supports daily and weekly-by-weekday rules only.
@@ -12,6 +17,8 @@ export interface RecurrenceState {
 
 export function buildRruleString(state: RecurrenceState): string | null {
   if (state.frequency === "none") return null;
+  // Callers must send back the original string for a rule we can't build.
+  if (state.frequency === "unsupported") return null;
   if (state.frequency === "daily") return "FREQ=DAILY";
   // weekly
   const codes = state.weekdays
@@ -40,15 +47,19 @@ export function parseRecurrenceState(rruleString: string | null): RecurrenceStat
       }
       return { frequency: "weekly", weekdays };
     }
+    // Parsed cleanly but isn't daily/weekly — e.g. monthly or yearly.
+    return { frequency: "unsupported", weekdays: [] };
   } catch {
-    // fall through
+    // Not parseable at all. Treated as unsupported rather than "none" for the
+    // same reason: saving must not quietly drop the rule.
+    return { frequency: "unsupported", weekdays: [] };
   }
-  return { frequency: "none", weekdays: [] };
 }
 
 /** Human summary for display, e.g. "Every Mon, Wed, Fri". */
 export function describeRecurrence(state: RecurrenceState): string {
   if (state.frequency === "none") return "Does not repeat";
+  if (state.frequency === "unsupported") return "Custom repeat";
   if (state.frequency === "daily") return "Every day";
   if (state.weekdays.length === 0) return "Weekly";
   if (state.weekdays.length === 7) return "Every day";

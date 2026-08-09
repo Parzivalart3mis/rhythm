@@ -41,3 +41,39 @@ describe("rrule-builder", () => {
     );
   });
 });
+
+describe("unsupported rules round-trip untouched", () => {
+  // Opening a block in the editor and saving it must never silently rewrite a
+  // rule the editor can't represent — that would turn a live series into a
+  // single one-off block.
+  it("flags a monthly rule as unsupported rather than 'none'", () => {
+    expect(parseRecurrenceState("FREQ=MONTHLY;BYMONTHDAY=1").frequency).toBe(
+      "unsupported"
+    );
+  });
+
+  it("flags a yearly rule as unsupported", () => {
+    expect(parseRecurrenceState("FREQ=YEARLY").frequency).toBe("unsupported");
+  });
+
+  it("flags an unparseable rule as unsupported", () => {
+    expect(parseRecurrenceState("TOTAL NONSENSE").frequency).toBe("unsupported");
+  });
+
+  it("still reports a genuinely absent rule as 'none'", () => {
+    expect(parseRecurrenceState(null).frequency).toBe("none");
+  });
+
+  it("refuses to synthesise a string for an unsupported rule", () => {
+    // null forces the caller to send the block's original rruleString back.
+    expect(
+      buildRruleString({ frequency: "unsupported", weekdays: [] })
+    ).toBeNull();
+  });
+
+  it("describes it without pretending it doesn't repeat", () => {
+    expect(describeRecurrence({ frequency: "unsupported", weekdays: [] })).toBe(
+      "Custom repeat"
+    );
+  });
+});

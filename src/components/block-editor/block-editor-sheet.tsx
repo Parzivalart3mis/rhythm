@@ -50,6 +50,9 @@ const empty = {
   date: toDateKey(new Date()),
   frequency: "none" as Frequency,
   weekdays: [] as number[],
+  // Verbatim rule for a recurrence this editor can't represent, sent back on
+  // save so opening a block never rewrites it.
+  originalRrule: null as string | null,
   reminderLeadMinutes: 10,
 };
 
@@ -94,6 +97,7 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
               toDateKey(new Date()),
             frequency: rec.frequency,
             weekdays: rec.weekdays,
+            originalRrule: block.rruleString,
             reminderLeadMinutes: block.reminderLeadMinutes,
           };
           setForm(seeded);
@@ -226,10 +230,14 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
       return;
     }
     setSaving(true);
-    const rruleString = buildRruleString({
-      frequency: form.frequency,
-      weekdays: form.weekdays,
-    });
+    // An unsupported rule can't be rebuilt, so hand back exactly what was stored.
+    const rruleString =
+      form.frequency === "unsupported"
+        ? form.originalRrule
+        : buildRruleString({
+            frequency: form.frequency,
+            weekdays: form.weekdays,
+          });
     const payload = {
       categoryId: form.categoryId,
       title: form.title.trim(),
@@ -420,7 +428,15 @@ export function BlockEditorSheet({ open, onOpenChange, target }: Props) {
                 />
               </div>
 
-              {isRecurring ? (
+              {form.frequency === "unsupported" ? (
+                <p className="pt-1 text-sm text-muted-foreground">
+                  This block repeats on a schedule this editor can&apos;t change
+                  yet. Saving keeps it exactly as it is — switch Repeat off to
+                  replace it with a one-off block.
+                </p>
+              ) : null}
+
+              {isRecurring && form.frequency !== "unsupported" ? (
                 <div className="space-y-3 pt-1">
                   <div className="grid grid-cols-2 gap-2">
                     <FreqButton
